@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: nodemetry-backend
+
+mqtt:
+  host: ${MQTT_HOST}
+  port: ${MQTT_PORT:8883}
+  username: ${MQTT_USERNAME}
+  password: ${MQTT_PASSWORD}
+  client-id: ${MQTT_CLIENT_ID:nodemetry-backend-local}
+  telemetry-topic: nodemetry/+/telemetry
+  status-topic: nodemetry/+/status
