@@ -7,7 +7,6 @@ public record TelemetryMessage(
         Double temperature,
         Double humidity,
         Double co2,
-        Double light,
         Double battery,
         Double rssi,
         String firmwareVersion
