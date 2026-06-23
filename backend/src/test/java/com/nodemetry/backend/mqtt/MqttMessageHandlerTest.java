@@ -1,6 +1,6 @@
 package com.nodemetry.backend.mqtt;
 
-import com.nodemetry.backend.telemetry.SensorReadingService;
+import com.nodemetry.backend.telemetry.TelemetryService;
 import com.nodemetry.backend.telemetry.TelemetryMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,7 +21,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class MqttMessageHandlerTest {
 
     @Mock
-    private SensorReadingService sensorReadingService;
+    private TelemetryService telemetryService;
 
     @InjectMocks
     private MqttMessageHandler handler;
@@ -44,7 +44,7 @@ class MqttMessageHandlerTest {
         handler.handleTelemetry("nodemetry/node-001/telemetry", payload);
 
         ArgumentCaptor<TelemetryMessage> messageCaptor = ArgumentCaptor.forClass(TelemetryMessage.class);
-        verify(sensorReadingService).processTelemetry(messageCaptor.capture());
+        verify(telemetryService).processTelemetry(messageCaptor.capture());
         TelemetryMessage message = messageCaptor.getValue();
 
         assertThat(message.messageId()).isEqualTo("message-001");
@@ -64,7 +64,7 @@ class MqttMessageHandlerTest {
         assertThatCode(() -> handler.handleTelemetry("nodemetry/node-001/telemetry", payload))
                 .doesNotThrowAnyException();
 
-        verify(sensorReadingService, never()).processTelemetry(any());
+        verify(telemetryService, never()).processTelemetry(any());
     }
 
     @Test
@@ -82,19 +82,19 @@ class MqttMessageHandlerTest {
                 }
                 """;
         doThrow(new IllegalArgumentException("messageId is required"))
-                .when(sensorReadingService)
+                .when(telemetryService)
                 .processTelemetry(any());
 
         assertThatCode(() -> handler.handleTelemetry("nodemetry/node-001/telemetry", payload))
                 .doesNotThrowAnyException();
 
-        verify(sensorReadingService).processTelemetry(any());
+        verify(telemetryService).processTelemetry(any());
     }
 
     @Test
     void handleStatusDoesNotProcessTelemetry() {
         handler.handleStatus("nodemetry/node-001/status", "{\"status\":\"online\"}");
 
-        verifyNoInteractions(sensorReadingService);
+        verifyNoInteractions(telemetryService);
     }
 }

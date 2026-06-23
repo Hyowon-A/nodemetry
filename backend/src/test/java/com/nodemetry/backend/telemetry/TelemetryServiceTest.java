@@ -23,7 +23,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class SensorReadingServiceTest {
+class TelemetryServiceTest {
 
     @Mock
     private SensorReadingRepository readingRepository;
@@ -32,7 +32,7 @@ class SensorReadingServiceTest {
     private SensorNodeRepository nodeRepository;
 
     @InjectMocks
-    private SensorReadingService service;
+    private TelemetryService service;
 
     @Test
     void processTelemetryCreatesNodeAndReadingWhenNodeDoesNotExist() {

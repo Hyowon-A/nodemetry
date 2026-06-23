@@ -6,12 +6,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class SensorReadingService {
+public class TelemetryService {
 
     private final SensorReadingRepository readingRepository;
     private final SensorNodeRepository nodeRepository;
 
-    public SensorReadingService(
+    public TelemetryService(
             SensorReadingRepository readingRepository,
             SensorNodeRepository nodeRepository
     ) {

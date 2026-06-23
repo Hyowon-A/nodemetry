@@ -2,17 +2,17 @@ package com.nodemetry.backend.mqtt;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nodemetry.backend.telemetry.TelemetryMessage;
-import com.nodemetry.backend.telemetry.SensorReadingService;
+import com.nodemetry.backend.telemetry.TelemetryService;
 import org.springframework.stereotype.Service;
 
 @Service
 public class MqttMessageHandler {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final SensorReadingService sensorReadingService;
+    private final TelemetryService telemetryService;
 
-    public MqttMessageHandler(SensorReadingService sensorReadingService) {
-        this.sensorReadingService = sensorReadingService;
+    public MqttMessageHandler(TelemetryService telemetryService) {
+        this.telemetryService = telemetryService;
     }
 
     public void handleTelemetry(String topic, String payload) {
@@ -24,7 +24,7 @@ public class MqttMessageHandler {
             System.out.println("Node ID: " + message.nodeId());
             System.out.println("Message ID: " + message.messageId());
 
-            sensorReadingService.processTelemetry(message);
+            telemetryService.processTelemetry(message);
 
             System.out.println("==========================");
 
