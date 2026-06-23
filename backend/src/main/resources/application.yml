@@ -17,6 +17,7 @@ spring:
         format_sql: true
 
 mqtt:
+  enabled: ${MQTT_ENABLED:false}
   host: ${MQTT_HOST}
   port: ${MQTT_PORT:8883}
   username: ${MQTT_USERNAME}
