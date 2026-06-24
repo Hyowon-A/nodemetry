@@ -31,10 +31,26 @@ public class MqttSubscriber {
             options.setCleanSession(true);
             options.setConnectionTimeout(10);
 
-            client.setCallback(new MqttCallback() {
+            client.setCallback(new MqttCallbackExtended() {
                 @Override
                 public void connectionLost(Throwable cause) {
                     System.err.println("MQTT connection lost: " + cause.getMessage());
+                }
+
+                @Override
+                public void connectComplete(boolean reconnect, String serverURI) {
+                    // Paho's automatic reconnect restores the TCP connection but does not
+                    // resubscribe on its own — without this, a reconnect leaves the client
+                    // connected yet silently deaf to every topic.
+                    if (reconnect) {
+                        try {
+                            client.subscribe(properties.getTelemetryTopic(), 1);
+                            client.subscribe(properties.getStatusTopic(), 1);
+                            System.out.println("Resubscribed after MQTT reconnect: " + serverURI);
+                        } catch (MqttException e) {
+                            System.err.println("Failed to resubscribe after reconnect: " + e.getMessage());
+                        }
+                    }
                 }
 
                 @Override

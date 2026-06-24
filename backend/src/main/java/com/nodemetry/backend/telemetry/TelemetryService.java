@@ -2,6 +2,7 @@ package com.nodemetry.backend.telemetry;
 
 import com.nodemetry.backend.node.SensorNode;
 import com.nodemetry.backend.node.SensorNodeRepository;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -10,13 +11,16 @@ public class TelemetryService {
 
     private final SensorReadingRepository readingRepository;
     private final SensorNodeRepository nodeRepository;
+    private final SimpMessagingTemplate messagingTemplate;
 
     public TelemetryService(
             SensorReadingRepository readingRepository,
-            SensorNodeRepository nodeRepository
+            SensorNodeRepository nodeRepository,
+            SimpMessagingTemplate messagingTemplate
     ) {
         this.readingRepository = readingRepository;
         this.nodeRepository = nodeRepository;
+        this.messagingTemplate = messagingTemplate;
     }
 
     @Transactional
@@ -54,6 +58,18 @@ public class TelemetryService {
         );
 
         readingRepository.save(reading);
+
+        SensorReadingResponse response = SensorReadingResponse.from(reading);
+
+        messagingTemplate.convertAndSend(
+                "/topic/nodes/" + message.nodeId() + "/latest",
+                response
+        );
+
+        messagingTemplate.convertAndSend(
+                "/topic/readings",
+                response
+        );
 
         System.out.println("Saved telemetry: " + message.messageId());
     }
