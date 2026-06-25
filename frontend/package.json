@@ -1,0 +1,23 @@
+{
+  "name": "nodemetry-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Live signal-monitor dashboard for the Nodemetry MQTT telemetry platform.",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "prepare": "svelte-kit sync"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-auto": "^3.2.0",
+    "@sveltejs/kit": "^2.5.0",
+    "@sveltejs/vite-plugin-svelte": "^4.0.0",
+    "svelte": "^5.0.0",
+    "vite": "^5.4.0"
+  },
+  "dependencies": {
+    "@stomp/stompjs": "^7.3.0"
+  }
+}

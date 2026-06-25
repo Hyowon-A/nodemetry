@@ -1,0 +1,130 @@
+/* ============================================================
+   Nodemetry — global theme
+   "Signal monitor" instrument console. Each metric is a scope
+   channel with its own color; the surface reads like graph paper.
+   ============================================================ */
+
+:root {
+  /* surfaces */
+  --bg: #090d13;
+  --bg-2: #0b1019;
+  --panel: #10161f;
+  --panel-2: #131b26;
+  --line: #1e2832;
+  --line-soft: #18212b;
+
+  /* text */
+  --text: #e7edf4;
+  --text-dim: #8a97a8;
+  --text-faint: #56616f;
+
+  /* signal channels (functional color-coding, like scope probes) */
+  --ch-temp: #ff9d4d;   /* heat   */
+  --ch-humid: #34d3de;  /* water  */
+  --ch-co2: #b483e0;    /* violet */
+  --ch-rssi: #57e08a;   /* signal */
+
+  /* status */
+  --ok: #45c25a;
+  --warn: #f0a93b;
+  --crit: #f76d6d;
+  --live: #57e08a;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --gap: 16px;
+
+  --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Code', monospace;
+  --sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg);
+  /* faint scope graph-paper + a soft signal glow toward the top */
+  background-image:
+    radial-gradient(120% 80% at 18% -10%, rgba(87, 224, 138, 0.07), transparent 55%),
+    radial-gradient(90% 70% at 90% 0%, rgba(52, 211, 222, 0.06), transparent 50%),
+    linear-gradient(var(--line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
+  background-attachment: fixed;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* mono is the "instrument" voice: labels, readouts, codes */
+.mono {
+  font-family: var(--mono);
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+button {
+  font-family: var(--mono);
+  cursor: pointer;
+  color: inherit;
+  border: none;
+  background: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ch-rssi);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* slim, dark scrollbars to match the console */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

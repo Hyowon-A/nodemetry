@@ -11,3 +11,5 @@ build/
 .vscode/
 .DS_Store
 *.log
+
+.svelte-kit/

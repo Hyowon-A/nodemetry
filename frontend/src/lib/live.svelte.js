@@ -1,0 +1,162 @@
+/**
+ * live.svelte.js
+ * ------------------------------------------------------------------
+ * Connects the dashboard to the real Spring Boot backend.
+ *
+ *   REST   →  initial fleet + history (GET /api/v1/nodes, /readings)
+ *   STOMP  →  live readings, pushed to /topic/readings
+ *             (see WebSocketConfig.java + TelemetryService.java)
+ *
+ * The backend's WS endpoint speaks STOMP over a raw WebSocket
+ * (no SockJS), so the client here is @stomp/stompjs, not the
+ * plain WebSocket API.
+ *
+ * Configure with environment variables (see .env.example):
+ *   PUBLIC_API_BASE   e.g. http://localhost:8080   (no trailing slash)
+ *   PUBLIC_WS_URL     e.g. ws://localhost:8080/ws
+ *
+ * +page.svelte calls connectLive() instead of startMockFeed().
+ * ------------------------------------------------------------------
+ */
+import { Client } from '@stomp/stompjs';
+import { env } from '$env/dynamic/public';
+import {
+  store,
+  config,
+  applyReading,
+  setNodes,
+  setConnected,
+  setLocalPipeline,
+  setAckHandler
+} from '$lib/telemetry.svelte.js';
+
+const API = (env.PUBLIC_API_BASE || 'http://localhost:8080').replace(/\/$/, '');
+const WS_URL = env.PUBLIC_WS_URL || API.replace(/^http/, 'ws') + '/ws';
+
+/** Normalise a timestamp (ISO string or epoch) to epoch ms. */
+const ms = (t) => (typeof t === 'number' ? t : t ? Date.parse(t) : Date.now());
+
+async function getJSON(path) {
+  const res = await fetch(`${API}${path}`);
+  if (!res.ok) throw new Error(`${path} → ${res.status}`);
+  return res.json();
+}
+
+function mapNode(n) {
+  return {
+    nodeId: n.nodeId,
+    name: n.name ?? n.nodeId,
+    location: n.location ?? '',
+    firmwareVersion: n.firmwareVersion ?? '—',
+    status: n.status ?? 'offline',
+    battery: n.battery ?? null,
+    rssi: n.rssi ?? null,
+    lastSeenAt: ms(n.lastSeenAt),
+    latest: { temperature: null, humidity: null, co2: null },
+    history: { t: [], temperature: [], temperatureRaw: [], humidity: [], humidityRaw: [], co2: [] }
+  };
+}
+
+async function seedHistory(node) {
+  try {
+    const rows = await getJSON(`/api/v1/nodes/${node.nodeId}/readings`);
+    rows.sort((a, b) => ms(a.measuredAt) - ms(b.measuredAt)); // oldest → newest
+    const recent = rows.slice(-config.WINDOW);
+    const h = node.history;
+    for (const r of recent) {
+      h.t.push(ms(r.measuredAt));
+      h.temperature.push(r.temperature ?? null);
+      h.temperatureRaw.push(r.temperature ?? null);
+      h.humidity.push(r.humidity ?? null);
+      h.humidityRaw.push(r.humidity ?? null);
+      h.co2.push(r.co2 ?? null);
+    }
+    const lastRow = recent[recent.length - 1];
+    if (lastRow) {
+      node.latest = {
+        temperature: lastRow.temperature ?? node.latest.temperature,
+        humidity: lastRow.humidity ?? node.latest.humidity,
+        co2: lastRow.co2 ?? node.latest.co2
+      };
+    }
+  } catch (e) {
+    console.warn(`[nodemetry] history seed failed for ${node.nodeId}:`, e.message);
+  }
+}
+
+let stomp = null;
+let alive = false;
+let clockTimer = null;
+
+/** Bootstrap from REST, then open the live STOMP connection. Returns nothing. */
+export async function connectLive() {
+  alive = true;
+  setLocalPipeline(false); // backend owns persistence; we just mirror readings
+  setAckHandler(null);
+
+  store.startedAt = Date.now();
+  clearInterval(clockTimer);
+  clockTimer = setInterval(() => {
+    store.now = Date.now();
+  }, 1000);
+
+  // 1) initial state over REST
+  try {
+    const nodes = (await getJSON('/api/v1/nodes')).map(mapNode);
+    setNodes(nodes);
+    await Promise.all(nodes.map(seedHistory));
+  } catch (e) {
+    console.error('[nodemetry] REST bootstrap failed — is PUBLIC_API_BASE correct?', e.message);
+  }
+
+  // 2) live stream — STOMP over WebSocket
+  openStomp();
+}
+
+function openStomp() {
+  if (!alive) return;
+
+  const client = new Client({
+    brokerURL: WS_URL,
+    reconnectDelay: 5000, // built-in auto-reconnect, capped retry cadence
+    onConnect: () => {
+      setConnected(true);
+      client.subscribe('/topic/readings', (message) => {
+        try {
+          const r = JSON.parse(message.body);
+          applyReading({
+            messageId: r.messageId,
+            nodeId: r.nodeId,
+            measuredAt: ms(r.measuredAt ?? r.receivedAt),
+            temperature: r.temperature,
+            humidity: r.humidity,
+            co2: r.co2,
+            battery: r.battery,
+            rssi: r.rssi,
+            firmwareVersion: r.firmwareVersion
+          });
+        } catch (error) {
+          console.error('[nodemetry] invalid STOMP reading:', error, message.body);
+        }
+      });
+    },
+    onWebSocketClose: () => setConnected(false),
+    onWebSocketError: (event) =>
+      console.error('[nodemetry] WebSocket connection failed:', WS_URL, event),
+    onStompError: (frame) =>
+      console.error('[nodemetry] STOMP error:', frame.headers?.message, frame.body)
+  });
+
+  stomp = client;
+  client.activate();
+}
+
+/** Tear down the live connection (returned to onMount for cleanup). */
+export function disconnectLive() {
+  alive = false;
+  clearInterval(clockTimer);
+  clockTimer = null;
+  setConnected(false);
+  stomp?.deactivate();
+  stomp = null;
+}
