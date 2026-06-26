@@ -95,6 +95,29 @@ class MqttMessageHandlerTest {
     }
 
     @Test
+    void handleTelemetryAcceptsNullLight() {
+        String payload = """
+                {
+                  "messageId": "message-002",
+                  "nodeId": "test-node-001",
+                  "temperature": 23.5,
+                  "humidity": 48.2,
+                  "co2": 615.0,
+                  "battery": 87.0,
+                  "rssi": -62.0,
+                  "firmwareVersion": "firmware-1.0.0",
+                  "light": null
+                }
+                """;
+
+        handler.handleTelemetry("nodemetry/node-001/telemetry", payload);
+
+        ArgumentCaptor<TelemetryMessage> messageCaptor = ArgumentCaptor.forClass(TelemetryMessage.class);
+        verify(telemetryService).processTelemetry(messageCaptor.capture());
+        assertThat(messageCaptor.getValue().light()).isNull();
+    }
+
+    @Test
     void handleStatusDoesNotProcessTelemetry() {
         handler.handleStatus("nodemetry/node-001/status", "{\"status\":\"online\"}");
 

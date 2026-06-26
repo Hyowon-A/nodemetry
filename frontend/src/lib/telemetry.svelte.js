@@ -32,7 +32,7 @@ const RULES = {
   humidityMin: 35,
   batteryMin: 20,
   rssiMin: -75,
-  lightMin: 50
+  lightMin: 50   // lux — below this suggests a covered sensor or near-dark environment
 };
 
 /* ----------------------------- state ----------------------------- */

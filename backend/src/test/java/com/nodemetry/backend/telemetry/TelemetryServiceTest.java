@@ -104,6 +104,21 @@ class TelemetryServiceTest {
         verifyNoInteractions(nodeRepository);
     }
 
+    @Test
+    void processTelemetryStoresNullLightForNodesWithoutLightSensor() {
+        TelemetryMessage message = new TelemetryMessage(
+                "message-002", "node-001", 23.5, 48.2, 615.0, 87.0, -62.0, "firmware-1.0.0", null
+        );
+        when(readingRepository.existsByMessageId(message.messageId())).thenReturn(false);
+        when(nodeRepository.findByNodeId(message.nodeId())).thenReturn(Optional.empty());
+
+        service.processTelemetry(message);
+
+        ArgumentCaptor<SensorReading> readingCaptor = ArgumentCaptor.forClass(SensorReading.class);
+        verify(readingRepository).save(readingCaptor.capture());
+        assertThat(readingCaptor.getValue().getLight()).isNull();
+    }
+
     @ParameterizedTest // Check multiple null and empty values
     @NullAndEmptySource
     @ValueSource(strings = {" ", "\t"})

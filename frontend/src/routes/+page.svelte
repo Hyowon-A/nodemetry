@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { env } from '$env/dynamic/public';
-  import { store, selectedNode, startMockFeed } from '$lib/telemetry.svelte.js';
+  import { store, selectedNode, startMockFeed, emptyHistory } from '$lib/telemetry.svelte.js';
   import { connectLive, disconnectLive } from '$lib/live.svelte.js';
   import TopBar from '$lib/components/TopBar.svelte';
   import OverviewStrip from '$lib/components/OverviewStrip.svelte';
@@ -20,7 +20,7 @@
   });
 
   const node = $derived(selectedNode());
-  const h = $derived(node?.history ?? { temperature: [], temperatureRaw: [], humidity: [], co2: [], light: [] });
+  const h = $derived(node?.history ?? emptyHistory());
   const last = (a) => (a.length ? a[a.length - 1] : null);
 </script>
 

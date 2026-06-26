@@ -96,7 +96,7 @@ class VirtualNode:
         self.co2 = self._walk(self.co2, 15, 400, 2000)
         self.battery = max(0.0, self.battery - random.uniform(0, 0.02))
         self.rssi = int(self._walk(self.rssi, 2, -95, -40))
-        self.light = self._walk(self.light, 50, 0, 100000)
+        self.light = self._walk(self.light, 500, 0, 100000)
 
         return {
             "messageId": f"{self.node_id}-{self.seq:06d}",
