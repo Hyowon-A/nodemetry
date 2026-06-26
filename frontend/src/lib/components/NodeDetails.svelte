@@ -1,6 +1,6 @@
 <script>
-  import { selectedNode } from '$lib/telemetry.svelte.js';
-  import { num } from '$lib/format.js';
+  import { selectedNode, store } from '$lib/telemetry.svelte.js';
+  import { num, timeAgo } from '$lib/format.js';
 
   const node = $derived(selectedNode());
 
@@ -22,6 +22,15 @@
     if (value == null) return 'var(--text-faint)';
     return value > 40 ? 'var(--ch-rssi)' : value > 20 ? 'var(--warn)' : 'var(--crit)';
   }
+
+  function nodeAccent(n) {
+    if (!n) return 'var(--text-faint)';
+    return n.status === 'online' ? rssiColor(n.rssi) : 'var(--crit)';
+  }
+
+  function nodeSubtitle(n) {
+    return [n.location, n.nodeId].filter((value) => value && value !== n.name).join(' / ');
+  }
 </script>
 
 {#snippet signal(rssi)}
@@ -41,53 +50,57 @@
   </span>
 {/snippet}
 
-<section class="panel">
+<section
+  class="panel"
+  style:--node-color={nodeAccent(node)}
+>
   {#if node}
+    {@const subtitle = nodeSubtitle(node)}
     <div class="row">
       <div class="identity">
-        <span class="eyebrow">node details</span>
-        <div class="content identity-row">
-          <h2>{node.name}</h2>
+        <div class="identity-top">
+          <span class="eyebrow">node details</span>
           <span class="status" class:on={node.status === 'online'}>
             <span class="led"></span>{node.status}
           </span>
         </div>
+
+        <div class="identity-main">
+          <div>
+            <h2>{node.name}</h2>
+            {#if subtitle}
+              <p class="subtitle mono">{subtitle}</p>
+            {/if}
+          </div>
+        </div>
       </div>
 
       <div class="grid">
-        <div class="detail">
+        <div class="detail last-seen-card">
+          <span class="eyebrow">last seen</span>
+          <span class="content metric-value mono last-seen-value">{timeAgo(node.lastSeenAt, store.now)}</span>
+        </div>
+        <div class="detail" style:--accent={rssiColor(node.rssi)}>
           <span class="eyebrow">signal</span>
-          <span class="content value">
+          <span class="content metric">
             {@render signal(node.rssi)}
-            <span class="mono">{node.rssi ?? '—'}<small>dBm</small></span>
+            <span class="metric-value mono">
+              {node.rssi ?? '—'}{#if node.rssi != null}<small>dBm</small>{/if}
+            </span>
           </span>
         </div>
-        <div class="detail">
+        <div class="detail" style:--accent={batteryColor(node.battery)}>
           <span class="eyebrow">battery</span>
-          <span class="content value">
+          <span class="content metric">
             {@render battery(node.battery)}
-            <span class="mono">{num(node.battery, 0)}%</span>
+            <span class="metric-value mono">
+              {num(node.battery, 0)}{#if node.battery != null}<small>%</small>{/if}
+            </span>
           </span>
         </div>
-        <div class="detail">
-          <span class="eyebrow">temperature</span>
-          <span class="content reading mono temp">{num(node.latest.temperature, 1)}<small>°C</small></span>
-        </div>
-        <div class="detail">
-          <span class="eyebrow">humidity</span>
-          <span class="content reading mono humid">{num(node.latest.humidity, 0)}<small>%</small></span>
-        </div>
-        <div class="detail">
-          <span class="eyebrow">co₂</span>
-          <span class="content reading mono co2">{num(node.latest.co2, 0)}<small>ppm</small></span>
-        </div>
-        <div class="detail">
-          <span class="eyebrow">light</span>
-          <span class="content reading mono light">{num(node.latest.light, 0)}<small>lux</small></span>
-        </div>
-        <div class="detail">
+        <div class="detail firmware-card">
           <span class="eyebrow">firmware</span>
-          <span class="content reading mono">{node.firmwareVersion}</span>
+          <span class="content metric-value mono">{node.firmwareVersion}</span>
         </div>
       </div>
     </div>
@@ -98,26 +111,59 @@
 
 <style>
   .panel {
-    padding: 18px;
-    overflow-x: auto;
+    padding: 14px;
+    overflow: hidden;
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    background: var(--panel);
-  }
-  .identity {
-    flex: 0 0 230px;
-    padding: 14px 16px;
+    background:
+      radial-gradient(80% 120% at 12% 0%, color-mix(in srgb, var(--node-color) 10%, transparent), transparent 58%),
+      linear-gradient(180deg, color-mix(in srgb, var(--panel-2) 70%, transparent), var(--panel));
   }
   .row {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(260px, 0.82fr) minmax(0, 1.8fr);
     align-items: stretch;
-    max-width: 1050px;
-    gap: 50px;
+    gap: 12px;
+  }
+  .identity {
+    display: grid;
+    grid-template-rows: 24px minmax(0, 1fr);
+    min-width: 0;
+    min-height: 122px;
+    gap: 10px;
+    padding: 18px;
+    border: 1px solid color-mix(in srgb, var(--node-color) 26%, var(--line));
+    border-radius: var(--radius-sm);
+    background:
+      linear-gradient(135deg, color-mix(in srgb, var(--node-color) 8%, transparent), transparent 58%),
+      var(--bg-2);
+  }
+  .eyebrow {
+    letter-spacing: 0;
+  }
+  .identity-top,
+  .identity-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .identity-top {
+    align-self: start;
+  }
+  .identity-main {
+    align-self: center;
   }
   h2 {
     color: var(--text);
-    font-size: 17px;
+    font-size: 24px;
+    line-height: 1.05;
     white-space: nowrap;
+  }
+  .subtitle {
+    margin: 7px 0 0;
+    color: var(--text-faint);
+    font-size: 11px;
   }
   .status {
     display: inline-flex;
@@ -126,7 +172,7 @@
     color: var(--text-dim);
     font-family: var(--mono);
     font-size: 11.5px;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
     text-transform: uppercase;
   }
   .status.on {
@@ -144,66 +190,66 @@
   }
   .grid {
     display: grid;
-    flex: 1;
-    grid-template-columns:
-        120px  /* signal */
-        120px  /* battery */
-        130px  /* temperature */
-        120px  /* humidity */
-        120px  /* CO₂ */
-        120px  /* light */
-        160px; /* firmware */
-    gap: 1px;
+    grid-template-columns: repeat(4, minmax(140px, 1fr));
+    gap: 12px;
+    min-width: 0;
+  }
+  .detail {
+    position: relative;
+    display: grid;
+    grid-template-rows: 24px minmax(0, 1fr);
+    min-width: 0;
+    min-height: 122px;
+    gap: 10px;
+    padding: 18px;
     overflow: hidden;
     border: 1px solid var(--line);
     border-radius: var(--radius-sm);
-    background: var(--line);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--accent) 9%, transparent), transparent 62%),
+      var(--bg-2);
   }
-  .detail {
-    min-width: 0;
-    padding: 14px 16px;
-    background: var(--bg-2);
+  .detail::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent);
   }
-  .identity > .eyebrow,
+  .firmware-card {
+    --accent: var(--text-dim);
+  }
+  .last-seen-card {
+    --accent: var(--ch-rssi);
+  }
   .detail > .eyebrow {
     display: block;
+    align-self: start;
   }
   .content {
-    min-height: 24px;
-    margin-top: 9px;
+    min-height: 42px;
+    margin-top: 0;
+    align-self: center;
   }
-  .identity-row {
-    display: flex;
+  .metric {
+    display: grid;
+    grid-template-columns: 44px minmax(0, max-content);
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-  .value {
-    display: flex;
-    align-items: center;
-    gap: 8px;
     color: var(--text);
-    font-size: 17px;
     font-variant-numeric: tabular-nums;
   }
-  .reading {
+  .metric-value {
     display: flex;
     align-items: center;
     color: var(--text);
-    font-size: 17px;
+    font-size: 23px;
+    line-height: 1;
     font-variant-numeric: tabular-nums;
   }
-  .reading.temp {
-    color: var(--ch-temp);
-  }
-  .reading.humid {
-    color: var(--ch-humid);
-  }
-  .reading.co2 {
-    color: var(--ch-co2);
-  }
-  .reading.light {
-    color: var(--ch-light);
+  .last-seen-value {
+    font-size: clamp(15px, 1.2vw, 20px);
+    white-space: nowrap;
   }
   small {
     margin-left: 3px;
@@ -213,7 +259,9 @@
   .signal {
     display: inline-flex;
     align-items: flex-end;
+    justify-content: flex-start;
     gap: 2px;
+    width: 44px;
     height: 16px;
   }
   .bar {
@@ -227,6 +275,8 @@
   .battery {
     display: inline-flex;
     align-items: center;
+    justify-content: flex-start;
+    width: 44px;
   }
   .cell {
     display: block;
@@ -253,5 +303,26 @@
     margin: 0;
     color: var(--text-faint);
     font-size: 12px;
+  }
+  @media (max-width: 900px) {
+    .row {
+      grid-template-columns: 1fr;
+    }
+    .grid {
+      grid-template-columns: repeat(2, minmax(140px, 1fr));
+    }
+  }
+  @media (max-width: 640px) {
+    .grid {
+      grid-template-columns: 1fr;
+    }
+    .identity-main,
+    .identity-top {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    h2 {
+      white-space: normal;
+    }
   }
 </style>
