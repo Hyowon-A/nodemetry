@@ -1,0 +1,11 @@
+.env
+
+# Local assistant/editor state
+.claude/
+CLAUDE.md
+
+# Python local artifacts
+__pycache__/
+*.py[cod]
+venv/
+.venv/

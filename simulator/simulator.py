@@ -35,6 +35,7 @@ import ssl
 import sys
 import threading
 import time
+import uuid
 from dataclasses import dataclass, field
 from dotenv import load_dotenv
 
@@ -72,6 +73,7 @@ STOP = threading.Event()
 @dataclass
 class VirtualNode:
     node_id: str
+    run_id: str
     firmware: str = "1.0.0-sim"
     has_co2: bool = False
     has_light: bool = False
@@ -99,7 +101,7 @@ class VirtualNode:
         self.light = self._walk(self.light, 500, 0, 100000)
 
         return {
-            "messageId": f"{self.node_id}-{self.seq:06d}",
+            "messageId": f"{self.node_id}-{self.run_id}-{self.seq:06d}",
             "nodeId": self.node_id,
             "temperature": round(self.temperature, 2),
             "humidity": round(self.humidity, 2),
@@ -217,6 +219,7 @@ def build_nodes(args):
         nodes.append(
             VirtualNode(
                 node_id=f"{args.node_prefix}-{i:04d}",
+                run_id=args.run_id,
                 has_co2=(i % 3 == 0),     # ~1/3 of nodes report CO2
                 has_light=(i % 5 == 0),  # ~1/5 of nodes report light
             )
@@ -252,6 +255,7 @@ def parse_args():
     p.add_argument("--password", default=os.environ.get("MQTT_PASSWORD"))
     p.add_argument("--prefix", default="nodemetry", help="topic root, e.g. nodemetry/{nodeId}/telemetry")
     p.add_argument("--node-prefix", default="vnode", help="virtual node id prefix")
+    p.add_argument("--run-id", default=None, help="run id included in messageId (default: random)")
     p.add_argument("--duration", type=float, default=0, help="stop after N seconds (0 = run until Ctrl+C)")
     p.add_argument("--duplicate-rate", type=float, default=0.0, help="fraction (0-1) of messages re-sent with same messageId")
     p.add_argument("--shared", action="store_true", help="multiplex nodes over a few connections (for capped brokers)")
@@ -261,13 +265,15 @@ def parse_args():
 
 def main():
     args = parse_args()
+    args.run_id = args.run_id or uuid.uuid4().hex[:12]
     nodes = build_nodes(args)
 
     expected_rate = args.nodes / args.interval if args.interval else 0
     mode = f"shared/{args.connections} conns" if args.shared else "one conn per node"
     print(
         f"Starting {args.nodes} virtual nodes ({mode}), QoS {args.qos}, "
-        f"interval {args.interval}s -> ~{expected_rate:.1f} msg/s expected",
+        f"interval {args.interval}s -> ~{expected_rate:.1f} msg/s expected, "
+        f"run_id={args.run_id}",
         flush=True,
     )
 
