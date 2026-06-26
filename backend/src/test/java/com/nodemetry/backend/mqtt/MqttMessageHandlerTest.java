@@ -37,7 +37,8 @@ class MqttMessageHandlerTest {
                   "co2": 615.0,
                   "battery": 87.0,
                   "rssi": -62.0,
-                  "firmwareVersion": "firmware-1.0.0"
+                  "firmwareVersion": "firmware-1.0.0",
+                  "light": 4200.0
                 }
                 """;
 
@@ -55,6 +56,7 @@ class MqttMessageHandlerTest {
         assertThat(message.battery()).isEqualTo(87.0);
         assertThat(message.rssi()).isEqualTo(-62.0);
         assertThat(message.firmwareVersion()).isEqualTo("firmware-1.0.0");
+        assertThat(message.light()).isEqualTo(4200.0);
     }
 
     @Test
@@ -78,7 +80,8 @@ class MqttMessageHandlerTest {
                   "co2": 615.0,
                   "battery": 87.0,
                   "rssi": -62.0,
-                  "firmwareVersion": "firmware-1.0.0"
+                  "firmwareVersion": "firmware-1.0.0",
+                  "light": 4200.0
                 }
                 """;
         doThrow(new IllegalArgumentException("messageId is required"))

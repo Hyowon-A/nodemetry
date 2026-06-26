@@ -82,6 +82,10 @@
           <span class="content reading mono co2">{num(node.latest.co2, 0)}<small>ppm</small></span>
         </div>
         <div class="detail">
+          <span class="eyebrow">light</span>
+          <span class="content reading mono light">{num(node.latest.light, 0)}<small>lux</small></span>
+        </div>
+        <div class="detail">
           <span class="eyebrow">firmware</span>
           <span class="content reading mono">{node.firmwareVersion}</span>
         </div>
@@ -147,6 +151,7 @@
         130px  /* temperature */
         120px  /* humidity */
         120px  /* CO₂ */
+        120px  /* light */
         160px; /* firmware */
     gap: 1px;
     overflow: hidden;
@@ -196,6 +201,9 @@
   }
   .reading.co2 {
     color: var(--ch-co2);
+  }
+  .reading.light {
+    color: var(--ch-light);
   }
   small {
     margin-left: 3px;

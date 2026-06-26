@@ -9,6 +9,7 @@ public record TelemetryMessage(
         Double co2,
         Double battery,
         Double rssi,
-        String firmwareVersion
+        String firmwareVersion,
+        Double light
 ) {
 }

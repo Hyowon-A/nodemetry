@@ -11,6 +11,7 @@ public record SensorReadingResponse(
         Double battery,
         Double rssi,
         String firmwareVersion,
+        Double light,
         Instant measuredAt,
         Instant receivedAt
 ) {
@@ -24,6 +25,7 @@ public record SensorReadingResponse(
                 reading.getBattery(),
                 reading.getRssi(),
                 reading.getFirmwareVersion(),
+                reading.getLight(),
                 reading.getMeasuredAt(),
                 reading.getReceivedAt()
         );

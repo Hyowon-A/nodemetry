@@ -31,7 +31,8 @@ const RULES = {
   tempMax: 28,
   humidityMin: 35,
   batteryMin: 20,
-  rssiMin: -75
+  rssiMin: -75,
+  lightMin: 50
 };
 
 /* ----------------------------- state ----------------------------- */
@@ -110,15 +111,19 @@ export function setConnected(connected) {
 /* --------------------------- seed fleet --------------------------- */
 
 const SEED = [
-  { nodeId: 'living-room-01', name: 'Living Room', location: 'Flat A', fw: '0.4.1', base: { t: 22.4, h: 47, c: 610 }, battery: 88, rssi: -58 },
+  { nodeId: 'living-room-01', name: 'Living Room', location: 'Flat A', fw: '0.4.1', base: { t: 22.4, h: 47, c: 610, l: 320 }, battery: 88, rssi: -58 },
   { nodeId: 'bedroom-02', name: 'Bedroom', location: 'Flat A', fw: '0.4.1', base: { t: 21.1, h: 53, c: 540 }, battery: 71, rssi: -64 },
-  { nodeId: 'kitchen-03', name: 'Kitchen', location: 'Flat A', fw: '0.4.0', base: { t: 25.8, h: 41, c: 820 }, battery: 54, rssi: -69, warmDrift: true },
+  { nodeId: 'kitchen-03', name: 'Kitchen', location: 'Flat A', fw: '0.4.0', base: { t: 25.8, h: 41, c: 820, l: 850 }, battery: 54, rssi: -69, warmDrift: true },
   { nodeId: 'office-04', name: 'Office', location: 'Flat B', fw: '0.4.1', base: { t: 23.0, h: 45, c: 660 }, battery: 33, rssi: -78 },
   { nodeId: 'garage-05', name: 'Garage', location: 'Flat B', fw: '0.3.9', base: { t: 17.5, h: 60, c: 470 }, battery: 9, rssi: -82, offline: true }
 ];
 
-function emptyHistory() {
-  return { t: [], temperature: [], temperatureRaw: [], humidity: [], humidityRaw: [], co2: [] };
+export function emptyHistory() {
+  return { t: [], temperature: [], temperatureRaw: [], humidity: [], humidityRaw: [], co2: [], light: [] };
+}
+
+export function emptyLatest() {
+  return { temperature: null, humidity: null, co2: null, light: null };
 }
 
 function seedNodes() {
@@ -135,8 +140,8 @@ function seedNodes() {
     base: { ...s.base },
     warmDrift: !!s.warmDrift,
     latest: s.offline
-      ? { temperature: null, humidity: null, co2: null }
-      : { temperature: s.base.t, humidity: s.base.h, co2: s.base.c },
+      ? emptyLatest()
+      : { temperature: s.base.t, humidity: s.base.h, co2: s.base.c, light: s.base.l ?? null },
     history: emptyHistory()
   }));
 }
@@ -185,7 +190,7 @@ export function applyReading(r) {
       battery: r.battery ?? null,
       rssi: r.rssi ?? null,
       lastSeenAt: t,
-      latest: { temperature: null, humidity: null, co2: null },
+      latest: emptyLatest(),
       history: emptyHistory()
     };
     store.nodes.push(node);
@@ -201,7 +206,8 @@ export function applyReading(r) {
   node.latest = {
     temperature: r.temperatureFiltered ?? r.temperature ?? node.latest.temperature,
     humidity: r.humidityFiltered ?? r.humidity ?? node.latest.humidity,
-    co2: r.co2 ?? node.latest.co2
+    co2: r.co2 ?? node.latest.co2,
+    light: r.light ?? node.latest.light
   };
 
   pushPoint(node.history.t, t);
@@ -210,6 +216,7 @@ export function applyReading(r) {
   pushPoint(node.history.humidity, node.latest.humidity);
   pushPoint(node.history.humidityRaw, r.humidityRaw ?? node.latest.humidity);
   pushPoint(node.history.co2, node.latest.co2);
+  pushPoint(node.history.light, node.latest.light);
   recountNodes();
 
   if (localPipeline) {
@@ -277,6 +284,7 @@ function evaluateAlerts(node) {
   check(l.humidity != null && l.humidity < RULES.humidityMin, 'humidity', 'warning', `Humidity ${l.humidity.toFixed(0)}% below ${RULES.humidityMin}%`);
   check(node.battery != null && node.battery < RULES.batteryMin, 'battery', 'warning', `Battery ${Math.round(node.battery)}% — replace soon`);
   check(node.rssi != null && node.rssi < RULES.rssiMin, 'rssi', 'info', `Weak signal ${Math.round(node.rssi)} dBm`);
+  check(l.light != null && l.light < RULES.lightMin, 'light', 'warning', `Light ${Math.round(l.light)} lux below ${RULES.lightMin}`);
 }
 
 /* ----------------------- mock MQTT generator ---------------------- */
@@ -292,6 +300,7 @@ function makeReading(node) {
   b.t = clamp(b.t + rnd(-0.25, node.warmDrift ? 0.4 : 0.25), 16, 31);
   b.h = clamp(b.h + rnd(-0.7, 0.7), 28, 70);
   b.c = clamp(b.c + rnd(-30, node.nodeId === 'kitchen-03' ? 55 : 30), 400, 1300);
+  if (b.l != null) b.l = clamp(b.l + rnd(-50, 50), 0, 100000);
 
   const tNoise = rnd(-0.5, 0.5);
   const hNoise = rnd(-0.9, 0.9);
@@ -308,7 +317,8 @@ function makeReading(node) {
     co2: Math.round(b.c),
     battery: +(node.battery - rnd(0, 0.05)).toFixed(2),
     rssi: Math.round(clamp(node.rssi + rnd(-3, 3), -92, -45)),
-    firmwareVersion: node.firmwareVersion
+    firmwareVersion: node.firmwareVersion,
+    light: b.l != null ? Math.round(b.l) : null
   };
 }
 

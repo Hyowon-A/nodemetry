@@ -54,7 +54,8 @@ public class TelemetryService {
                 message.co2(),
                 message.battery(),
                 message.rssi(),
-                message.firmwareVersion()
+                message.firmwareVersion(),
+                message.light()
         );
 
         readingRepository.save(reading);

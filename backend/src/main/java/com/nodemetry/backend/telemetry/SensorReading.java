@@ -27,6 +27,7 @@ public class SensorReading {
     private Double co2;
     private Double battery;
     private Double rssi;
+    private Double light;
 
     @Column(name = "firmware_version")
     private String firmwareVersion;
@@ -47,7 +48,8 @@ public class SensorReading {
             Double co2,
             Double battery,
             Double rssi,
-            String firmwareVersion
+            String firmwareVersion,
+            Double light
     ) {
         this.messageId = messageId;
         this.nodeId = nodeId;
@@ -57,6 +59,7 @@ public class SensorReading {
         this.battery = battery;
         this.rssi = rssi;
         this.firmwareVersion = firmwareVersion;
+        this.light = light;
         this.measuredAt = Instant.now();
         this.receivedAt = Instant.now();
     }
@@ -90,6 +93,8 @@ public class SensorReading {
     }
 
     public Double getRssi() { return rssi; }
+
+    public Double getLight() { return light; }
 
     public String getFirmwareVersion() {
         return firmwareVersion;

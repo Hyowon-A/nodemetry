@@ -27,7 +27,9 @@ import {
   setNodes,
   setConnected,
   setLocalPipeline,
-  setAckHandler
+  setAckHandler,
+  emptyHistory,
+  emptyLatest
 } from '$lib/telemetry.svelte.js';
 
 const API = (env.PUBLIC_API_BASE || 'http://localhost:8080').replace(/\/$/, '');
@@ -52,8 +54,8 @@ function mapNode(n) {
     battery: n.battery ?? null,
     rssi: n.rssi ?? null,
     lastSeenAt: ms(n.lastSeenAt),
-    latest: { temperature: null, humidity: null, co2: null },
-    history: { t: [], temperature: [], temperatureRaw: [], humidity: [], humidityRaw: [], co2: [] }
+    latest: emptyLatest(),
+    history: emptyHistory()
   };
 }
 
@@ -70,13 +72,16 @@ async function seedHistory(node) {
       h.humidity.push(r.humidity ?? null);
       h.humidityRaw.push(r.humidity ?? null);
       h.co2.push(r.co2 ?? null);
+      h.light.push(r.light ?? null);
     }
     const lastRow = recent[recent.length - 1];
     if (lastRow) {
+      const prev = node.latest;
       node.latest = {
-        temperature: lastRow.temperature ?? node.latest.temperature,
-        humidity: lastRow.humidity ?? node.latest.humidity,
-        co2: lastRow.co2 ?? node.latest.co2
+        temperature: lastRow.temperature ?? prev.temperature,
+        humidity: lastRow.humidity ?? prev.humidity,
+        co2: lastRow.co2 ?? prev.co2,
+        light: lastRow.light ?? prev.light
       };
     }
   } catch (e) {
@@ -131,6 +136,7 @@ function openStomp() {
             temperature: r.temperature,
             humidity: r.humidity,
             co2: r.co2,
+            light: r.light,
             battery: r.battery,
             rssi: r.rssi,
             firmwareVersion: r.firmwareVersion

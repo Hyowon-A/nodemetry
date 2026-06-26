@@ -20,7 +20,7 @@
   });
 
   const node = $derived(selectedNode());
-  const h = $derived(node?.history ?? { temperature: [], temperatureRaw: [], humidity: [], co2: [] });
+  const h = $derived(node?.history ?? { temperature: [], temperatureRaw: [], humidity: [], co2: [], light: [] });
   const last = (a) => (a.length ? a[a.length - 1] : null);
 </script>
 
@@ -75,7 +75,18 @@
             />
           </div>
 
-          <div class="panel wide signature" style:--stagger="5">
+          <div class="panel" style:--stagger="5">
+            <SignalChart
+              label="light"
+              unit="lux"
+              value={last(h.light)}
+              decimals={0}
+              height={150}
+              series={[{ points: h.light, color: 'var(--ch-light)', area: true, width: 2 }]}
+            />
+          </div>
+
+          <div class="panel wide signature" style:--stagger="6">
             <div class="sig-head">
               <span class="eyebrow">raw vs filtered · temperature</span>
               <div class="legend mono">
@@ -96,8 +107,8 @@
       </section>
 
       <div class="support-grid">
-        <div class="panel-bare" style:--stagger="6"><AlertsPanel /></div>
-        <div class="panel-bare" style:--stagger="7"><IngestionMetrics /></div>
+        <div class="panel-bare" style:--stagger="7"><AlertsPanel /></div>
+        <div class="panel-bare" style:--stagger="8"><IngestionMetrics /></div>
       </div>
     </section>
   </div>

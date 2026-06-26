@@ -62,6 +62,7 @@ class TelemetryServiceTest {
         assertThat(savedReading.getTemperature()).isEqualTo(message.temperature());
         assertThat(savedReading.getHumidity()).isEqualTo(message.humidity());
         assertThat(savedReading.getCo2()).isEqualTo(message.co2());
+        assertThat(savedReading.getLight()).isEqualTo(message.light());
         assertThat(savedReading.getBattery()).isEqualTo(message.battery());
         assertThat(savedReading.getRssi()).isEqualTo(message.rssi());
         assertThat(savedReading.getFirmwareVersion()).isEqualTo(message.firmwareVersion());
@@ -167,7 +168,8 @@ class TelemetryServiceTest {
                 615.0,
                 87.0,
                 -62.0,
-                firmwareVersion
+                firmwareVersion,
+                4200.0
         );
     }
 }
