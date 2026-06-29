@@ -1,6 +1,72 @@
 <script>
+  import { onMount } from 'svelte';
   import { store, toggleFeed } from '$lib/telemetry.svelte.js';
   import { clock, uptime } from '$lib/format.js';
+
+  let simulator = $state({
+    running: false,
+    busy: false,
+    error: '',
+    panelOpen: false,
+    options: {
+      nodes: 10,
+      interval: 10,
+      duration: 0,
+      qos: 1,
+      shared: false,
+      connections: 5,
+      duplicateRate: 0
+    }
+  });
+  let simulatorOptionsLoaded = false;
+
+  function applySimulatorStatus(data) {
+    simulator.running = data.running;
+    simulator.error = data.lastExit?.error ?? '';
+
+    if (data.options && (!simulatorOptionsLoaded || data.running)) {
+      Object.assign(simulator.options, data.options);
+      simulatorOptionsLoaded = true;
+    }
+  }
+
+  async function refreshSimulator() {
+    try {
+      const res = await fetch('/api/simulator');
+      if (!res.ok) return;
+      const data = await res.json();
+      applySimulatorStatus(data);
+    } catch {
+      simulator.running = false;
+    }
+  }
+
+  async function toggleSimulator() {
+    simulator.busy = true;
+    simulator.error = '';
+
+    try {
+      const res = await fetch('/api/simulator', {
+        method: simulator.running ? 'DELETE' : 'POST',
+        headers: simulator.running ? undefined : { 'content-type': 'application/json' },
+        body: simulator.running ? undefined : JSON.stringify(simulator.options)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? `Simulator request failed (${res.status})`);
+      applySimulatorStatus(data);
+      setTimeout(refreshSimulator, 800);
+    } catch (error) {
+      simulator.error = error.message;
+    } finally {
+      simulator.busy = false;
+    }
+  }
+
+  onMount(() => {
+    refreshSimulator();
+    const timer = setInterval(refreshSimulator, 3000);
+    return () => clearInterval(timer);
+  });
 </script>
 
 <header class="bar">
@@ -34,6 +100,111 @@
     <div class="stat">
       <span class="eyebrow">node time</span>
       <span class="mono val">{clock(store.now)}</span>
+    </div>
+    <div class="sim-control">
+      <button
+        class="feed"
+        class:on={simulator.panelOpen}
+        disabled={simulator.busy}
+        title="Simulator options"
+        onclick={() => (simulator.panelOpen = !simulator.panelOpen)}
+      >
+        SIM CFG
+      </button>
+      <button
+        class="feed sim"
+        class:on={simulator.running}
+        disabled={simulator.busy}
+        title={simulator.error || 'Run Python simulator'}
+        onclick={toggleSimulator}
+      >
+        <span class="pip" class:live={simulator.running}></span>
+        {simulator.busy ? '...' : simulator.running ? 'SIM ON' : 'RUN SIM'}
+      </button>
+
+      {#if simulator.panelOpen}
+        <form class="sim-panel" onsubmit={(event) => event.preventDefault()}>
+          <label>
+            <span class="eyebrow">nodes</span>
+            <input
+              class="mono"
+              type="number"
+              min="1"
+              max="5000"
+              step="1"
+              disabled={simulator.running || simulator.busy}
+              bind:value={simulator.options.nodes}
+            />
+          </label>
+          <label>
+            <span class="eyebrow">interval</span>
+            <input
+              class="mono"
+              type="number"
+              min="1"
+              max="3600"
+              step="0.5"
+              disabled={simulator.running || simulator.busy}
+              bind:value={simulator.options.interval}
+            />
+          </label>
+          <label>
+            <span class="eyebrow">duration</span>
+            <input
+              class="mono"
+              type="number"
+              min="0"
+              max="86400"
+              step="1"
+              disabled={simulator.running || simulator.busy}
+              bind:value={simulator.options.duration}
+            />
+          </label>
+          <label>
+            <span class="eyebrow">qos</span>
+            <select class="mono" disabled={simulator.running || simulator.busy} bind:value={simulator.options.qos}>
+              <option value={0}>0</option>
+              <option value={1}>1</option>
+              <option value={2}>2</option>
+            </select>
+          </label>
+          <label>
+            <span class="eyebrow">connections</span>
+            <input
+              class="mono"
+              type="number"
+              min="1"
+              max="200"
+              step="1"
+              disabled={!simulator.options.shared || simulator.running || simulator.busy}
+              bind:value={simulator.options.connections}
+            />
+          </label>
+          <label>
+            <span class="eyebrow">duplicate rate</span>
+            <input
+              class="mono"
+              type="number"
+              min="0"
+              max="1"
+              step="0.01"
+              disabled={simulator.running || simulator.busy}
+              bind:value={simulator.options.duplicateRate}
+            />
+          </label>
+          <label class="toggle-row">
+            <span class="eyebrow">shared</span>
+            <input
+              type="checkbox"
+              disabled={simulator.running || simulator.busy}
+              bind:checked={simulator.options.shared}
+            />
+          </label>
+          {#if simulator.error}
+            <p class="sim-error mono">{simulator.error}</p>
+          {/if}
+        </form>
+      {/if}
     </div>
     <button class="feed" class:on={store.connected} onclick={toggleFeed}>
       <span class="pip" class:live={store.connected}></span>
@@ -101,6 +272,11 @@
     align-items: center;
     gap: 22px;
   }
+  .sim-control {
+    position: relative;
+    display: inline-flex;
+    gap: 8px;
+  }
   .stat {
     display: flex;
     flex-direction: column;
@@ -133,6 +309,59 @@
   }
   .feed:hover {
     border-color: var(--text-dim);
+  }
+  .feed:disabled {
+    cursor: wait;
+    opacity: 0.7;
+  }
+  .sim-panel {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    z-index: 20;
+    width: min(360px, calc(100vw - 28px));
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    padding: 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  }
+  .sim-panel label {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+  }
+  .sim-panel input,
+  .sim-panel select {
+    min-width: 0;
+    width: 100%;
+    padding: 8px 9px;
+    color: var(--text);
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  .sim-panel input:disabled,
+  .sim-panel select:disabled {
+    opacity: 0.55;
+  }
+  .toggle-row {
+    align-content: end;
+  }
+  .toggle-row input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--live);
+  }
+  .sim-error {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: var(--crit);
+    font-size: 11px;
+    line-height: 1.4;
   }
   .pip {
     width: 7px;

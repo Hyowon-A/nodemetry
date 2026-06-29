@@ -1,6 +1,7 @@
 package com.nodemetry.backend.mqtt;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nodemetry.backend.node.NodeService;
 import com.nodemetry.backend.telemetry.TelemetryMessage;
 import com.nodemetry.backend.telemetry.TelemetryService;
 import org.springframework.stereotype.Service;
@@ -10,9 +11,11 @@ public class MqttMessageHandler {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final TelemetryService telemetryService;
+    private final NodeService nodeService;
 
-    public MqttMessageHandler(TelemetryService telemetryService) {
+    public MqttMessageHandler(TelemetryService telemetryService, NodeService nodeService) {
         this.telemetryService = telemetryService;
+        this.nodeService = nodeService;
     }
 
     public void handleTelemetry(String topic, String payload) {
@@ -37,9 +40,21 @@ public class MqttMessageHandler {
     }
 
     public void handleStatus(String topic, String payload) {
-        System.out.println("=== Status Received ===");
-        System.out.println("Topic: " + topic);
-        System.out.println("Payload: " + payload);
-        System.out.println("=======================");
+        try {
+            String[] parts = topic.split("/");
+            if (parts.length < 3) {
+                System.err.println("Malformed status topic: " + topic);
+                return;
+            }
+
+            String nodeId = parts[1];
+            boolean updated = nodeService.processStatusUpdate(nodeId, "online");
+
+            if (updated) System.out.println("Status updated for node: " + nodeId);
+
+        } catch (Exception e) {
+            System.err.println("Failed to process status message on topic: " + topic);
+            System.err.println("Error: " + e.getMessage());
+        }
     }
 }

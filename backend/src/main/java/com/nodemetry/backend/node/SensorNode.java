@@ -89,4 +89,13 @@ public class SensorNode {
         this.firmwareVersion = firmwareVersion;
         this.lastSeenAt = Instant.now();
     }
+
+    public void markOnline() {
+        this.status = "online";
+        this.lastSeenAt = Instant.now();
+    }
+
+    public void markOffline() {
+        this.status = "offline";
+    }
 }

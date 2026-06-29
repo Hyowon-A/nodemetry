@@ -24,6 +24,7 @@ import {
   store,
   config,
   applyReading,
+  applyStatus,
   setNodes,
   setConnected,
   setLocalPipeline,
@@ -143,6 +144,15 @@ function openStomp() {
           });
         } catch (error) {
           console.error('[nodemetry] invalid STOMP reading:', error, message.body);
+        }
+      });
+
+      client.subscribe('/topic/nodes/status', (message) => {
+        try {
+          const { nodeId, status } = JSON.parse(message.body);
+          applyStatus(nodeId, status);
+        } catch (error) {
+          console.error('[nodemetry] invalid status message:', error, message.body);
         }
       });
     },

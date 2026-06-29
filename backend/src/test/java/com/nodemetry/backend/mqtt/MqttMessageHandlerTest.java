@@ -1,5 +1,6 @@
 package com.nodemetry.backend.mqtt;
 
+import com.nodemetry.backend.node.NodeService;
 import com.nodemetry.backend.telemetry.TelemetryService;
 import com.nodemetry.backend.telemetry.TelemetryMessage;
 import org.junit.jupiter.api.Test;
@@ -12,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -22,6 +24,9 @@ class MqttMessageHandlerTest {
 
     @Mock
     private TelemetryService telemetryService;
+
+    @Mock
+    private NodeService nodeService;
 
     @InjectMocks
     private MqttMessageHandler handler;
@@ -122,5 +127,30 @@ class MqttMessageHandlerTest {
         handler.handleStatus("nodemetry/node-001/status", "{\"status\":\"online\"}");
 
         verifyNoInteractions(telemetryService);
+    }
+
+    @Test
+    void handleStatusUpdatesNodeStatus() {
+        handler.handleStatus("nodemetry/node-001/status", "{\"status\":\"online\"}");
+
+        verify(nodeService).processStatusUpdate("node-001", "online");
+    }
+
+    @Test
+    void handleStatusDoesNotThrowOnMalformedTopic() {
+        assertThatCode(() -> handler.handleStatus("bad-topic", "{}"))
+                .doesNotThrowAnyException();
+
+        verifyNoInteractions(nodeService);
+    }
+
+    @Test
+    void handleStatusDoesNotPropagateServiceExceptions() {
+        doThrow(new RuntimeException("db error"))
+                .when(nodeService)
+                .processStatusUpdate(any(), any());
+
+        assertThatCode(() -> handler.handleStatus("nodemetry/node-001/status", "{}"))
+                .doesNotThrowAnyException();
     }
 }

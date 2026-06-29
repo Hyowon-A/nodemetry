@@ -10,6 +10,7 @@
   import IngestionMetrics from '$lib/components/IngestionMetrics.svelte';
   import NodeTable from '$lib/components/NodeTable.svelte';
   import NodeDetails from '$lib/components/NodeDetails.svelte';
+  import RunsPanel from '$lib/components/RunsPanel.svelte';
 
   onMount(() => {
     if (env.PUBLIC_USE_MOCK === 'false') {
@@ -110,6 +111,7 @@
         <div class="panel-bare" style:--stagger="7"><AlertsPanel /></div>
         <div class="panel-bare" style:--stagger="8"><IngestionMetrics /></div>
       </div>
+      <div class="panel-bare" style:--stagger="9"><RunsPanel /></div>
     </section>
   </div>
 

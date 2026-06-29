@@ -242,6 +242,7 @@ export function applyStatus(nodeId, status, reason) {
   } else {
     activeAlertKeys.delete(`${nodeId}:offline`);
   }
+  recountNodes();
 }
 
 /** Apply a backend-pushed alert (the WebSocket "alert" event) directly into the store. */

@@ -2,6 +2,7 @@ package com.nodemetry.backend.telemetry;
 
 import com.nodemetry.backend.node.SensorNode;
 import com.nodemetry.backend.node.SensorNodeRepository;
+import com.nodemetry.backend.run.RunRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -11,6 +12,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.util.Optional;
 
@@ -30,6 +32,12 @@ class TelemetryServiceTest {
 
     @Mock
     private SensorNodeRepository nodeRepository;
+
+    @Mock
+    private SimpMessagingTemplate messagingTemplate;
+
+    @Mock
+    private RunRegistry runRegistry;
 
     @InjectMocks
     private TelemetryService service;
