@@ -58,9 +58,9 @@ public class MqttSubscriber {
                     String payload = new String(message.getPayload());
 
                     if (topic.endsWith("/telemetry")) {
-                        messageHandler.handleTelemetry(topic, payload);
+                        messageHandler.handleTelemetry(topic, payload, message.isRetained());
                     } else if (topic.endsWith("/status")) {
-                        messageHandler.handleStatus(topic, payload);
+                        messageHandler.handleStatus(topic, payload, message.isRetained());
                     } else {
                         System.out.println("Unknown topic: " + topic);
                         System.out.println(payload);

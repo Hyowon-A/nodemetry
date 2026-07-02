@@ -123,6 +123,27 @@ class MqttMessageHandlerTest {
     }
 
     @Test
+    void handleTelemetryIgnoresRetainedMessages() {
+        String payload = """
+                {
+                  "messageId": "message-001",
+                  "nodeId": "test-node-001",
+                  "temperature": 23.5,
+                  "humidity": 48.2,
+                  "co2": 615.0,
+                  "battery": 87.0,
+                  "rssi": -62.0,
+                  "firmwareVersion": "firmware-1.0.0",
+                  "light": 4200.0
+                }
+                """;
+
+        handler.handleTelemetry("nodemetry/node-001/telemetry", payload, true);
+
+        verifyNoInteractions(telemetryService);
+    }
+
+    @Test
     void handleStatusDoesNotProcessTelemetry() {
         handler.handleStatus("nodemetry/node-001/status", "{\"status\":\"online\"}");
 
@@ -134,6 +155,36 @@ class MqttMessageHandlerTest {
         handler.handleStatus("nodemetry/node-001/status", "{\"status\":\"online\"}");
 
         verify(nodeService).processStatusUpdate("node-001", "online");
+    }
+
+    @Test
+    void handleStatusUsesOfflinePayload() {
+        handler.handleStatus("nodemetry/node-001/status", "{\"status\":\"offline\"}");
+
+        verify(nodeService).processStatusUpdate("node-001", "offline");
+    }
+
+    @Test
+    void handleStatusIgnoresRetainedMessages() {
+        handler.handleStatus("nodemetry/node-001/status", "{\"status\":\"online\"}", true);
+
+        verifyNoInteractions(nodeService);
+    }
+
+    @Test
+    void handleStatusDoesNotUpdateWhenPayloadIsMissingStatus() {
+        assertThatCode(() -> handler.handleStatus("nodemetry/node-001/status", "{}"))
+                .doesNotThrowAnyException();
+
+        verifyNoInteractions(nodeService);
+    }
+
+    @Test
+    void handleStatusDoesNotUpdateWhenPayloadHasInvalidStatus() {
+        assertThatCode(() -> handler.handleStatus("nodemetry/node-001/status", "{\"status\":\"booting\"}"))
+                .doesNotThrowAnyException();
+
+        verifyNoInteractions(nodeService);
     }
 
     @Test
@@ -150,7 +201,7 @@ class MqttMessageHandlerTest {
                 .when(nodeService)
                 .processStatusUpdate(any(), any());
 
-        assertThatCode(() -> handler.handleStatus("nodemetry/node-001/status", "{}"))
+        assertThatCode(() -> handler.handleStatus("nodemetry/node-001/status", "{\"status\":\"online\"}"))
                 .doesNotThrowAnyException();
     }
 }

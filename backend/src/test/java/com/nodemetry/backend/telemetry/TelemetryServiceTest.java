@@ -76,6 +76,9 @@ class TelemetryServiceTest {
         assertThat(savedReading.getFirmwareVersion()).isEqualTo(message.firmwareVersion());
         assertThat(savedReading.getMeasuredAt()).isNotNull();
         assertThat(savedReading.getReceivedAt()).isNotNull();
+        verify(runRegistry).recordReceived();
+        verify(runRegistry).recordSaved();
+        verify(runRegistry, never()).recordDupe();
     }
 
     @Test
@@ -98,6 +101,9 @@ class TelemetryServiceTest {
         ArgumentCaptor<SensorReading> readingCaptor = ArgumentCaptor.forClass(SensorReading.class);
         verify(readingRepository).save(readingCaptor.capture());
         assertThat(readingCaptor.getValue().getMessageId()).isEqualTo(message.messageId());
+        verify(runRegistry).recordReceived();
+        verify(runRegistry).recordSaved();
+        verify(runRegistry, never()).recordDupe();
     }
 
     @Test
@@ -110,6 +116,9 @@ class TelemetryServiceTest {
         verify(readingRepository).existsByMessageId(message.messageId());
         verify(readingRepository, never()).save(any());
         verifyNoInteractions(nodeRepository);
+        verify(runRegistry).recordReceived();
+        verify(runRegistry).recordDupe();
+        verify(runRegistry, never()).recordSaved();
     }
 
     @Test
@@ -141,7 +150,7 @@ class TelemetryServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("messageId is required");
 
-        verifyNoInteractions(readingRepository, nodeRepository);
+        verifyNoInteractions(readingRepository, nodeRepository, runRegistry);
     }
 
     @ParameterizedTest
@@ -158,7 +167,7 @@ class TelemetryServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("nodeId is required");
 
-        verifyNoInteractions(readingRepository, nodeRepository);
+        verifyNoInteractions(readingRepository, nodeRepository, runRegistry);
     }
 
     @ParameterizedTest
@@ -175,7 +184,7 @@ class TelemetryServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("firmwareVersion is required");
 
-        verifyNoInteractions(readingRepository, nodeRepository);
+        verifyNoInteractions(readingRepository, nodeRepository, runRegistry);
     }
 
     private TelemetryMessage validMessage() {

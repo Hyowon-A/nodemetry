@@ -16,7 +16,7 @@ public class SensorNode {
 
     private String name;
     private String location;
-    private String status = "online";
+    private String status = "offline";
     private Double battery;
     private Double rssi;
 
@@ -33,9 +33,8 @@ public class SensorNode {
 
     public SensorNode(String nodeId) {
         this.nodeId = nodeId;
-        this.status = "online";
+        this.status = "offline";
         this.createdAt = Instant.now();
-        this.lastSeenAt = Instant.now();
     }
 
     public Long getId() {

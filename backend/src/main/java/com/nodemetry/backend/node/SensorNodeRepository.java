@@ -8,5 +8,6 @@ import java.util.Optional;
 
 public interface SensorNodeRepository extends JpaRepository<SensorNode, Long> {
     Optional<SensorNode> findByNodeId(String nodeId);
+    List<SensorNode> findByStatusNot(String status);
     List<SensorNode> findByLastSeenAtBeforeAndStatusNot(Instant threshold, String status);
 }

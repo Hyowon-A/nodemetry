@@ -6,8 +6,12 @@ import com.nodemetry.backend.telemetry.TelemetryMessage;
 import com.nodemetry.backend.telemetry.TelemetryService;
 import org.springframework.stereotype.Service;
 
+import java.util.Locale;
+
 @Service
 public class MqttMessageHandler {
+
+    private record StatusMessage(String status) {}
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final TelemetryService telemetryService;
@@ -19,6 +23,15 @@ public class MqttMessageHandler {
     }
 
     public void handleTelemetry(String topic, String payload) {
+        handleTelemetry(topic, payload, false);
+    }
+
+    public void handleTelemetry(String topic, String payload, boolean retained) {
+        if (retained) {
+            System.out.println("Ignored retained telemetry message on topic: " + topic);
+            return;
+        }
+
         try {
             TelemetryMessage message = objectMapper.readValue(payload, TelemetryMessage.class);
 
@@ -40,6 +53,15 @@ public class MqttMessageHandler {
     }
 
     public void handleStatus(String topic, String payload) {
+        handleStatus(topic, payload, false);
+    }
+
+    public void handleStatus(String topic, String payload, boolean retained) {
+        if (retained) {
+            System.out.println("Ignored retained status message on topic: " + topic);
+            return;
+        }
+
         try {
             String[] parts = topic.split("/");
             if (parts.length < 3) {
@@ -48,7 +70,14 @@ public class MqttMessageHandler {
             }
 
             String nodeId = parts[1];
-            boolean updated = nodeService.processStatusUpdate(nodeId, "online");
+            StatusMessage statusMessage = objectMapper.readValue(payload, StatusMessage.class);
+            String status = normalizeStatus(statusMessage.status());
+            if (status == null) {
+                System.err.println("Missing or invalid status payload on topic: " + topic);
+                return;
+            }
+
+            boolean updated = nodeService.processStatusUpdate(nodeId, status);
 
             if (updated) System.out.println("Status updated for node: " + nodeId);
 
@@ -56,5 +85,14 @@ public class MqttMessageHandler {
             System.err.println("Failed to process status message on topic: " + topic);
             System.err.println("Error: " + e.getMessage());
         }
+    }
+
+    private String normalizeStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+
+        String normalized = status.trim().toLowerCase(Locale.ROOT);
+        return ("online".equals(normalized) || "offline".equals(normalized)) ? normalized : null;
     }
 }

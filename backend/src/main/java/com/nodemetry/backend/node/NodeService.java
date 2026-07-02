@@ -54,17 +54,24 @@ public class NodeService {
     }
 
     @Transactional
+    public int markAllKnownNodesOffline() {
+        return markNodesOffline(nodeRepository.findByStatusNot("offline"));
+    }
+
+    @Transactional
     public int markStaleNodesOffline(Duration threshold) {
         Instant cutoff = Instant.now().minus(threshold);
-        List<SensorNode> staleNodes = nodeRepository.findByLastSeenAtBeforeAndStatusNot(cutoff, "offline");
+        return markNodesOffline(nodeRepository.findByLastSeenAtBeforeAndStatusNot(cutoff, "offline"));
+    }
 
-        for (SensorNode node : staleNodes) {
+    private int markNodesOffline(List<SensorNode> nodes) {
+        for (SensorNode node : nodes) {
             node.markOffline();
         }
 
-        if (!staleNodes.isEmpty()) {
-            nodeRepository.saveAll(staleNodes);
-            List<String> offlineNodeIds = staleNodes.stream().map(SensorNode::getNodeId).toList();
+        if (!nodes.isEmpty()) {
+            nodeRepository.saveAll(nodes);
+            List<String> offlineNodeIds = nodes.stream().map(SensorNode::getNodeId).toList();
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
@@ -75,6 +82,6 @@ public class NodeService {
             });
         }
 
-        return staleNodes.size();
+        return nodes.size();
     }
 }
