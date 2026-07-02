@@ -1,8 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
-  import { env } from '$env/dynamic/public';
-  import { store, selectedNode, startMockFeed, emptyHistory } from '$lib/telemetry.svelte.js';
-  import { connectLive, disconnectLive } from '$lib/live.svelte.js';
+  import { store, selectedNode, emptyHistory } from '$lib/telemetry.svelte.js';
   import TopBar from '$lib/components/TopBar.svelte';
   import OverviewStrip from '$lib/components/OverviewStrip.svelte';
   import SignalChart from '$lib/components/SignalChart.svelte';
@@ -10,15 +7,6 @@
   import IngestionMetrics from '$lib/components/IngestionMetrics.svelte';
   import NodeTable from '$lib/components/NodeTable.svelte';
   import NodeDetails from '$lib/components/NodeDetails.svelte';
-  import RunsPanel from '$lib/components/RunsPanel.svelte';
-
-  onMount(() => {
-    if (env.PUBLIC_USE_MOCK === 'false') {
-      connectLive();
-      return disconnectLive;
-    }
-    return startMockFeed();
-  });
 
   const node = $derived(selectedNode());
   const h = $derived(node?.history ?? emptyHistory());
@@ -111,7 +99,6 @@
         <div class="panel-bare" style:--stagger="7"><AlertsPanel /></div>
         <div class="panel-bare" style:--stagger="8"><IngestionMetrics /></div>
       </div>
-      <div class="panel-bare" style:--stagger="9"><RunsPanel /></div>
     </section>
   </div>
 
