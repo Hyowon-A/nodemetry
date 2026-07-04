@@ -14,6 +14,12 @@ import java.util.List;
 @Configuration
 public class SecurityConfig {
 
+    private final FrontendProperties frontendProperties;
+
+    public SecurityConfig(FrontendProperties frontendProperties) {
+        this.frontendProperties = frontendProperties;
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
@@ -30,10 +36,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        config.setAllowedOrigins(List.of(
-                "http://localhost:5173",
-                "http://127.0.0.1:5173"
-        ));
+        config.setAllowedOrigins(frontendProperties.getAllowedOrigins());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(false);

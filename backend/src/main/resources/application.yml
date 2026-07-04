@@ -25,3 +25,7 @@ mqtt:
   client-id: ${MQTT_CLIENT_ID:nodemetry-backend-local}
   telemetry-topic: nodemetry/+/telemetry
   status-topic: nodemetry/+/status
+
+app:
+  frontend:
+    allowed-origins: ${FRONTEND_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
