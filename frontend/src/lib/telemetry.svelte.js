@@ -64,6 +64,19 @@ export function selectedNode() {
   );
 }
 
+export function isVirtualNodeId(nodeId) {
+  return nodeId?.startsWith('vnode-') ?? false;
+}
+
+export function dashboardNodes() {
+  return store.nodes.filter((node) => !isVirtualNodeId(node.nodeId));
+}
+
+export function selectedDashboardNode() {
+  const nodes = dashboardNodes();
+  return nodes.find((n) => n.nodeId === store.selectedNodeId) ?? nodes[0] ?? null;
+}
+
 export function selectNode(id) {
   store.selectedNodeId = id;
 }
@@ -90,6 +103,7 @@ export function setAckHandler(fn) {
 }
 
 export function setNodes(nodes) {
+  for (const node of nodes) ensureNodeIngestion(node);
   store.nodes = nodes;
   store.selectedNodeId = nodes[0]?.nodeId ?? null;
   recountNodes();
@@ -119,11 +133,23 @@ const SEED = [
 ];
 
 export function emptyHistory() {
-  return { t: [], temperature: [], temperatureRaw: [], humidity: [], humidityRaw: [], co2: [], light: [] };
+  return { t: [], temperature: [], temperatureRaw: [], humidity: [], humidityRaw: [], co2: [], light: [], lightRaw: [] };
 }
 
 export function emptyLatest() {
   return { temperature: null, humidity: null, co2: null, light: null };
+}
+
+export function emptyIngestionMetrics() {
+  return {
+    messagesReceived: 0,
+    messagesSaved: 0,
+    duplicatesSkipped: 0,
+    alertsCreated: 0,
+    avgProcessingMs: 0,
+    throughput: 0,
+    lastMessageAt: null
+  };
 }
 
 function seedNodes() {
@@ -142,7 +168,8 @@ function seedNodes() {
     latest: s.offline
       ? emptyLatest()
       : { temperature: s.base.t, humidity: s.base.h, co2: s.base.c, light: s.base.l ?? null },
-    history: emptyHistory()
+    history: emptyHistory(),
+    ingestion: emptyIngestionMetrics()
   }));
 }
 
@@ -161,19 +188,42 @@ function pushPoint(arr, v) {
 
 const seenMessageIds = new Set();
 const activeAlertKeys = new Set();
+const nodeMessageWindows = new Map();
+
+function ensureNodeIngestion(node) {
+  node.ingestion ??= emptyIngestionMetrics();
+  return node.ingestion;
+}
+
+function nodeMessageWindow(nodeId) {
+  if (!nodeMessageWindows.has(nodeId)) nodeMessageWindows.set(nodeId, []);
+  return nodeMessageWindows.get(nodeId);
+}
+
+function refreshNodeThroughput(node, now) {
+  const window = nodeMessageWindow(node.nodeId);
+  while (window.length && now - window[0].now >= 5000) window.shift();
+
+  const total = window.reduce((sum, item) => sum + item.n, 0);
+  ensureNodeIngestion(node).throughput = +(total / 5).toFixed(1);
+}
+
+function noteNodeMessage(node, now) {
+  const metrics = ensureNodeIngestion(node);
+  metrics.messagesReceived++;
+  metrics.lastMessageAt = now;
+  nodeMessageWindow(node.nodeId).push({ now, n: 1 });
+  refreshNodeThroughput(node, now);
+}
+
+function noteNodeAlert(nodeId) {
+  const node = store.nodes.find((n) => n.nodeId === nodeId);
+  if (node) ensureNodeIngestion(node).alertsCreated++;
+}
 
 /** Apply one telemetry reading (the WebSocket "reading" event). */
 export function applyReading(r) {
   if (!r?.nodeId) return;
-
-  store.metrics.messagesReceived++;
-
-  // duplicate handling via messageId (idempotent writes)
-  if (r.messageId && seenMessageIds.has(r.messageId)) {
-    store.metrics.duplicatesSkipped++;
-    return;
-  }
-  if (r.messageId) seenMessageIds.add(r.messageId);
 
   const t = r.measuredAt ?? Date.now();
   let node = store.nodes.find((n) => n.nodeId === r.nodeId);
@@ -191,11 +241,23 @@ export function applyReading(r) {
       rssi: r.rssi ?? null,
       lastSeenAt: t,
       latest: emptyLatest(),
-      history: emptyHistory()
+      history: emptyHistory(),
+      ingestion: emptyIngestionMetrics()
     };
     store.nodes.push(node);
     store.selectedNodeId ??= node.nodeId;
   }
+
+  store.metrics.messagesReceived++;
+  noteNodeMessage(node, t);
+
+  // duplicate handling via messageId (idempotent writes)
+  if (r.messageId && seenMessageIds.has(r.messageId)) {
+    store.metrics.duplicatesSkipped++;
+    ensureNodeIngestion(node).duplicatesSkipped++;
+    return;
+  }
+  if (r.messageId) seenMessageIds.add(r.messageId);
 
   node.lastSeenAt = t;
   if (node.status !== 'online') node.status = 'online';
@@ -207,7 +269,7 @@ export function applyReading(r) {
     temperature: r.temperatureFiltered ?? r.temperature ?? node.latest.temperature,
     humidity: r.humidityFiltered ?? r.humidity ?? node.latest.humidity,
     co2: r.co2 ?? node.latest.co2,
-    light: r.light ?? node.latest.light
+    light: r.lightFiltered ?? r.light ?? node.latest.light
   };
 
   pushPoint(node.history.t, t);
@@ -216,7 +278,9 @@ export function applyReading(r) {
   pushPoint(node.history.humidity, node.latest.humidity);
   pushPoint(node.history.humidityRaw, r.humidityRaw ?? node.latest.humidity);
   pushPoint(node.history.co2, node.latest.co2);
+  pushPoint(node.history.lightRaw, r.lightRaw ?? r.light ?? node.latest.light);
   pushPoint(node.history.light, node.latest.light);
+  ensureNodeIngestion(node).messagesSaved++;
   recountNodes();
 
   if (localPipeline) {
@@ -224,6 +288,7 @@ export function applyReading(r) {
     // rolling average processing time (purely illustrative)
     const proc = rnd(1.4, 6.2);
     store.metrics.avgProcessingMs = store.metrics.avgProcessingMs * 0.9 + proc * 0.1;
+    node.ingestion.avgProcessingMs = node.ingestion.avgProcessingMs * 0.9 + proc * 0.1;
     evaluateAlerts(node);
   }
 }
@@ -252,6 +317,7 @@ export function applyAlert(alert) {
   store.alerts.unshift(alert);
   if (store.alerts.length > 40) store.alerts.pop();
   store.metrics.alertsCreated++;
+  noteNodeAlert(alert.nodeId);
 }
 
 function pushAlert(nodeId, type, severity, message) {
@@ -269,6 +335,7 @@ function pushAlert(nodeId, type, severity, message) {
   });
   if (store.alerts.length > 40) store.alerts.pop();
   store.metrics.alertsCreated++;
+  noteNodeAlert(nodeId);
 }
 
 function clearAlert(nodeId, type) {
@@ -305,6 +372,7 @@ function makeReading(node) {
 
   const tNoise = rnd(-0.5, 0.5);
   const hNoise = rnd(-0.9, 0.9);
+  const lNoise = rnd(-30, 30);
   msgSeq++;
 
   return {
@@ -319,6 +387,8 @@ function makeReading(node) {
     battery: +(node.battery - rnd(0, 0.05)).toFixed(2),
     rssi: Math.round(clamp(node.rssi + rnd(-3, 3), -92, -45)),
     firmwareVersion: node.firmwareVersion,
+    lightRaw: b.l != null ? Math.round(clamp(b.l + lNoise, 0, 100000)) : null,
+    lightFiltered: b.l != null ? Math.round(b.l) : null,
     light: b.l != null ? Math.round(b.l) : null
   };
 }

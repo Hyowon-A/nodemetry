@@ -1,8 +1,8 @@
 <script>
-  import { selectedNode, store } from '$lib/telemetry.svelte.js';
+  import { selectedDashboardNode, store } from '$lib/telemetry.svelte.js';
   import { num, timeAgo } from '$lib/format.js';
 
-  const node = $derived(selectedNode());
+  const node = $derived(selectedDashboardNode());
 
   function bars(rssi) {
     if (rssi == null) return 0;

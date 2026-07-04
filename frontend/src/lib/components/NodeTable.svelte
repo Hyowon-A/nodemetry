@@ -1,6 +1,9 @@
 <script>
-  import { store, selectNode } from '$lib/telemetry.svelte.js';
+  import { store, selectNode, dashboardNodes, selectedDashboardNode } from '$lib/telemetry.svelte.js';
   import { timeAgo } from '$lib/format.js';
+
+  const nodes = $derived(dashboardNodes());
+  const selectedNodeId = $derived(selectedDashboardNode()?.nodeId ?? nodes[0]?.nodeId ?? null);
 </script>
 
 <section class="panel">
@@ -9,41 +12,45 @@
     <span class="hint mono">select a node</span>
   </div>
 
-  <div class="scroll">
-    <table>
-      <thead>
-        <tr>
-          <th>node</th>
-          <th>status</th>
-          <th>last seen</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each store.nodes as node (node.nodeId)}
-          <tr
-            class:offline={node.status !== 'online'}
-            class:selected={(store.selectedNodeId ?? store.nodes[0]?.nodeId) === node.nodeId}
-            onclick={() => selectNode(node.nodeId)}
-            tabindex="0"
-            onkeydown={(event) =>
-              (event.key === 'Enter' || event.key === ' ') &&
-              (event.preventDefault(), selectNode(node.nodeId))}
-          >
-            <td>
-              <div class="name">{node.name}</div>
-              <div class="id mono">{node.nodeId}</div>
-            </td>
-            <td>
-              <span class="status" class:on={node.status === 'online'}>
-                <span class="led"></span>{node.status}
-              </span>
-            </td>
-            <td class="mono dim">{timeAgo(node.lastSeenAt, store.now)}</td>
+  {#if nodes.length === 0}
+    <p class="empty mono">No physical nodes found.</p>
+  {:else}
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>node</th>
+            <th>status</th>
+            <th>last seen</th>
           </tr>
-        {/each}
-      </tbody>
-    </table>
-  </div>
+        </thead>
+        <tbody>
+          {#each nodes as node (node.nodeId)}
+            <tr
+              class:offline={node.status !== 'online'}
+              class:selected={selectedNodeId === node.nodeId}
+              onclick={() => selectNode(node.nodeId)}
+              tabindex="0"
+              onkeydown={(event) =>
+                (event.key === 'Enter' || event.key === ' ') &&
+                (event.preventDefault(), selectNode(node.nodeId))}
+            >
+              <td>
+                <div class="name">{node.name}</div>
+                <div class="id mono">{node.nodeId}</div>
+              </td>
+              <td>
+                <span class="status" class:on={node.status === 'online'}>
+                  <span class="led"></span>{node.status}
+                </span>
+              </td>
+              <td class="mono dim">{timeAgo(node.lastSeenAt, store.now)}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+  {/if}
 </section>
 
 <style>
@@ -66,6 +73,12 @@
   }
   .scroll {
     overflow-x: auto;
+  }
+  .empty {
+    margin: 0;
+    color: var(--text-faint);
+    font-size: 12.5px;
+    padding: 10px 2px 2px;
   }
   table {
     width: 100%;

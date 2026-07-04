@@ -100,8 +100,10 @@ class VirtualNode:
         self.rssi = int(self._walk(self.rssi, 2, -95, -40))
         self.light = self._walk(self.light, 500, 0, 100000)
 
+        message_id = f"{self.seq:06d}"
+
         return {
-            "messageId": f"{self.node_id}-{self.run_id}-{self.seq:06d}",
+            "messageId": f"{self.node_id}-{self.run_id}-{message_id}",
             "nodeId": self.node_id,
             "temperature": round(self.temperature, 2),
             "humidity": round(self.humidity, 2),
@@ -254,8 +256,8 @@ def parse_args():
     p.add_argument("--username", default=os.environ.get("MQTT_USERNAME"))
     p.add_argument("--password", default=os.environ.get("MQTT_PASSWORD"))
     p.add_argument("--prefix", default="nodemetry", help="topic root, e.g. nodemetry/{nodeId}/telemetry")
-    p.add_argument("--node-prefix", default="vnode", help="virtual node id prefix")
-    p.add_argument("--run-id", default=None, help="run id included in messageId (default: random)")
+    p.add_argument("--node-prefix", default="node", help="virtual node id prefix")
+    p.add_argument("--run-id", default=uuid.uuid4().hex[:12], help="run id included in messageId (default: random)")
     p.add_argument("--duration", type=float, default=0, help="stop after N seconds (0 = run until Ctrl+C)")
     p.add_argument("--duplicate-rate", type=float, default=0.0, help="fraction (0-1) of messages re-sent with same messageId")
     p.add_argument("--shared", action="store_true", help="multiplex nodes over a few connections (for capped brokers)")
@@ -265,7 +267,6 @@ def parse_args():
 
 def main():
     args = parse_args()
-    args.run_id = args.run_id or uuid.uuid4().hex[:12]
     nodes = build_nodes(args)
 
     expected_rate = args.nodes / args.interval if args.interval else 0

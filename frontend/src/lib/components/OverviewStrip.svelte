@@ -1,8 +1,9 @@
 <script>
-  import { store } from '$lib/telemetry.svelte.js';
+  import { dashboardNodes } from '$lib/telemetry.svelte.js';
 
-  const online = $derived(store.nodes.filter((n) => n.status === 'online').length);
-  const total = $derived(store.nodes.length);
+  const nodes = $derived(dashboardNodes());
+  const online = $derived(nodes.filter((n) => n.status === 'online').length);
+  const total = $derived(nodes.length);
 
   const cards = $derived([
     {
@@ -10,7 +11,7 @@
       value: `${online}`,
       sub: `/ ${total}`,
       color: 'var(--ch-rssi)',
-      bars: store.nodes.map((n) => n.status === 'online')
+      bars: nodes.map((n) => n.status === 'online')
     }
   ]);
 </script>

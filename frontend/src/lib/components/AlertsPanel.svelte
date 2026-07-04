@@ -1,20 +1,28 @@
 <script>
-  import { store, acknowledgeAlert } from '$lib/telemetry.svelte.js';
+  import { store, acknowledgeAlert, selectedDashboardNode } from '$lib/telemetry.svelte.js';
   import { timeAgo } from '$lib/format.js';
 
-  const active = $derived(store.alerts.filter((a) => !a.acknowledged));
+  const node = $derived(selectedDashboardNode());
+  const active = $derived(
+    node ? store.alerts.filter((a) => !a.acknowledged && a.nodeId === node.nodeId) : []
+  );
   const symbol = { critical: '✕', warning: '!', info: 'i' };
 </script>
 
 <section class="panel">
   <div class="head">
     <span class="eyebrow">active alerts</span>
-    <span class="count mono" class:hot={active.length > 0}>{active.length}</span>
+    <span class="meta">
+      <span class="node-label mono">{node?.nodeId ?? 'no node'}</span>
+      <span class="count mono" class:hot={active.length > 0}>{active.length}</span>
+    </span>
   </div>
 
   <div class="list" role="list">
-    {#if active.length === 0}
-      <p class="empty mono">All channels nominal. No active alerts.</p>
+    {#if !node}
+      <p class="empty mono">No physical node selected.</p>
+    {:else if active.length === 0}
+      <p class="empty mono">All channels nominal for this node.</p>
     {/if}
     {#each active as a (a.id)}
       <article class="alert {a.severity}" role="listitem">
@@ -49,6 +57,21 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
+  }
+  .meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .node-label {
+    max-width: 180px;
+    overflow: hidden;
+    color: var(--text-faint);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .count {
     font-size: 13px;

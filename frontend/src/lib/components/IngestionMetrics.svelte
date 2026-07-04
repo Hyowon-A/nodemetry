@@ -1,22 +1,38 @@
 <script>
-  import { store } from '$lib/telemetry.svelte.js';
+  import { store, selectedDashboardNode } from '$lib/telemetry.svelte.js';
   import { num } from '$lib/format.js';
 
-  const m = $derived(store.metrics);
+  const node = $derived(selectedDashboardNode());
+  const metrics = $derived(node?.ingestion ?? {});
+  const activeAlerts = $derived(
+    node ? store.alerts.filter((alert) => !alert.acknowledged && alert.nodeId === node.nodeId).length : 0
+  );
+  const throughput = $derived(
+    node?.ingestion?.lastMessageAt && store.now - node.ingestion.lastMessageAt <= 5000
+      ? node.ingestion.throughput
+      : 0
+  );
   const items = $derived([
-    { k: 'received', v: m.messagesReceived.toLocaleString() },
-    { k: 'saved', v: m.messagesSaved.toLocaleString() },
-    { k: 'dupes skipped', v: m.duplicatesSkipped.toLocaleString(), warn: m.duplicatesSkipped > 0 },
-    { k: 'throughput', v: num(m.throughput, 1), unit: 'msg/s', accent: true },
-    { k: 'active', v: m.activeNodes },
-    { k: 'offline', v: m.offlineNodes, warn: m.offlineNodes > 0 },
-    { k: 'alerts', v: m.alertsCreated },
-    { k: 'avg proc', v: num(m.avgProcessingMs, 1), unit: 'ms' }
+    { k: 'received', v: (metrics.messagesReceived ?? 0).toLocaleString() },
+    { k: 'saved', v: (metrics.messagesSaved ?? 0).toLocaleString() },
+    {
+      k: 'dupes skipped',
+      v: (metrics.duplicatesSkipped ?? 0).toLocaleString(),
+      warn: (metrics.duplicatesSkipped ?? 0) > 0
+    },
+    { k: 'throughput', v: num(throughput, 1), unit: 'msg/s', accent: throughput > 0 },
+    { k: 'status', v: node?.status ?? 'none', accent: node?.status === 'online', warn: node?.status === 'offline' },
+    { k: 'history', v: (node?.history?.t.length ?? 0).toLocaleString() },
+    { k: 'alerts', v: activeAlerts, warn: activeAlerts > 0 },
+    { k: 'avg proc', v: num(metrics.avgProcessingMs ?? 0, 1), unit: 'ms' }
   ]);
 </script>
 
 <section class="panel">
-  <span class="eyebrow">ingestion metrics</span>
+  <div class="head">
+    <span class="eyebrow">ingestion metrics</span>
+    <span class="hint mono">{node?.nodeId ?? 'no node'}</span>
+  </div>
   <div class="grid">
     {#each items as it (it.k)}
       <div class="cell">
@@ -38,6 +54,16 @@
     display: flex;
     flex-direction: column;
     gap: 13px;
+  }
+  .head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .hint {
+    color: var(--text-faint);
+    font-size: 11px;
   }
   .grid {
     display: grid;

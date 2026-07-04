@@ -73,7 +73,8 @@ async function seedHistory(node) {
       h.humidity.push(r.humidity ?? null);
       h.humidityRaw.push(r.humidity ?? null);
       h.co2.push(r.co2 ?? null);
-      h.light.push(r.light ?? null);
+      h.lightRaw.push(r.lightRaw ?? r.light ?? null);
+      h.light.push(r.lightFiltered ?? r.light ?? null);
     }
     const lastRow = recent[recent.length - 1];
     if (lastRow) {
@@ -82,7 +83,7 @@ async function seedHistory(node) {
         temperature: lastRow.temperature ?? prev.temperature,
         humidity: lastRow.humidity ?? prev.humidity,
         co2: lastRow.co2 ?? prev.co2,
-        light: lastRow.light ?? prev.light
+        light: lastRow.lightFiltered ?? lastRow.light ?? prev.light
       };
     }
   } catch (e) {
@@ -137,6 +138,8 @@ function openStomp() {
             temperature: r.temperature,
             humidity: r.humidity,
             co2: r.co2,
+            lightRaw: r.lightRaw ?? r.light,
+            lightFiltered: r.lightFiltered,
             light: r.light,
             battery: r.battery,
             rssi: r.rssi,

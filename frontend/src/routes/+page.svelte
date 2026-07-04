@@ -1,5 +1,5 @@
 <script>
-  import { store, selectedNode, emptyHistory } from '$lib/telemetry.svelte.js';
+  import { selectedDashboardNode, emptyHistory } from '$lib/telemetry.svelte.js';
   import TopBar from '$lib/components/TopBar.svelte';
   import OverviewStrip from '$lib/components/OverviewStrip.svelte';
   import SignalChart from '$lib/components/SignalChart.svelte';
@@ -8,7 +8,7 @@
   import NodeTable from '$lib/components/NodeTable.svelte';
   import NodeDetails from '$lib/components/NodeDetails.svelte';
 
-  const node = $derived(selectedNode());
+  const node = $derived(selectedDashboardNode());
   const h = $derived(node?.history ?? emptyHistory());
   const last = (a) => (a.length ? a[a.length - 1] : null);
 </script>
@@ -31,51 +31,7 @@
       <section class="readings" aria-label="Reading charts">
 
         <div class="charts">
-          <div class="panel" style:--stagger="2">
-            <SignalChart
-              label="temperature"
-              unit="°C"
-              value={last(h.temperature)}
-              decimals={1}
-              height={150}
-              series={[{ points: h.temperature, color: 'var(--ch-temp)', area: true, glow: true, width: 2.2 }]}
-            />
-          </div>
-
-          <div class="panel" style:--stagger="3">
-            <SignalChart
-              label="humidity"
-              unit="%"
-              value={last(h.humidity)}
-              decimals={0}
-              height={150}
-              series={[{ points: h.humidity, color: 'var(--ch-humid)', area: true, width: 2 }]}
-            />
-          </div>
-
-          <div class="panel" style:--stagger="4">
-            <SignalChart
-              label="co₂"
-              unit="ppm"
-              value={last(h.co2)}
-              decimals={0}
-              height={150}
-              series={[{ points: h.co2, color: 'var(--ch-co2)', area: true, width: 2 }]}
-            />
-          </div>
-
-          <div class="panel" style:--stagger="5">
-            <SignalChart
-              label="light"
-              unit="lux"
-              value={last(h.light)}
-              decimals={0}
-              height={150}
-              series={[{ points: h.light, color: 'var(--ch-light)', area: true, width: 2 }]}
-            />
-          </div>
-
-          <div class="panel wide signature" style:--stagger="6">
+          <div class="panel wide comparison" style:--stagger="2" style:--chart-color="var(--ch-temp)">
             <div class="sig-head">
               <span class="eyebrow">raw vs filtered · temperature</span>
               <div class="legend mono">
@@ -86,9 +42,57 @@
             <SignalChart
               label=""
               height={150}
+              unit="°C"
+              value={last(h.temperature)}
+              decimals={1}
+              timestamps={h.t}
               series={[
-                { points: h.temperatureRaw, color: 'var(--ch-temp)', faint: true, width: 1.4 },
-                { points: h.temperature, color: 'var(--ch-temp)', glow: true, width: 2.4 }
+                { name: 'raw', points: h.temperatureRaw, color: 'var(--ch-temp)', faint: true, width: 1.4 },
+                { name: 'filtered', points: h.temperature, color: 'var(--ch-temp)', area: true, glow: true, width: 2.4 }
+              ]}
+            />
+          </div>
+
+          <div class="panel wide comparison" style:--stagger="3" style:--chart-color="var(--ch-humid)">
+            <div class="sig-head">
+              <span class="eyebrow">raw vs filtered · humidity</span>
+              <div class="legend mono">
+                <span><i class="sw raw"></i>raw</span>
+                <span><i class="sw filt"></i>filtered</span>
+              </div>
+            </div>
+            <SignalChart
+              label=""
+              height={150}
+              unit="%"
+              value={last(h.humidity)}
+              decimals={0}
+              timestamps={h.t}
+              series={[
+                { name: 'raw', points: h.humidityRaw, color: 'var(--ch-humid)', faint: true, width: 1.4 },
+                { name: 'filtered', points: h.humidity, color: 'var(--ch-humid)', area: true, glow: true, width: 2.4 }
+              ]}
+            />
+          </div>
+
+          <div class="panel wide comparison" style:--stagger="4" style:--chart-color="var(--ch-light)">
+            <div class="sig-head">
+              <span class="eyebrow">raw vs filtered · light</span>
+              <div class="legend mono">
+                <span><i class="sw raw"></i>raw</span>
+                <span><i class="sw filt"></i>filtered</span>
+              </div>
+            </div>
+            <SignalChart
+              label=""
+              height={150}
+              unit="lux"
+              value={last(h.light)}
+              decimals={0}
+              timestamps={h.t}
+              series={[
+                { name: 'raw', points: h.lightRaw, color: 'var(--ch-light)', faint: true, width: 1.4 },
+                { name: 'filtered', points: h.light, color: 'var(--ch-light)', area: true, glow: true, width: 2.4 }
               ]}
             />
           </div>
@@ -167,10 +171,10 @@
   .panel.wide {
     grid-column: 1 / -1;
   }
-  .signature {
+  .comparison {
     position: relative;
     background:
-      radial-gradient(120% 140% at 50% 0%, rgba(255, 157, 77, 0.06), transparent 60%),
+      radial-gradient(120% 140% at 50% 0%, color-mix(in srgb, var(--chart-color) 8%, transparent), transparent 60%),
       var(--panel);
   }
   .sig-head {
@@ -197,12 +201,12 @@
     display: inline-block;
   }
   .sw.raw {
-    background: var(--ch-temp);
+    background: var(--chart-color);
     opacity: 0.4;
   }
   .sw.filt {
-    background: var(--ch-temp);
-    box-shadow: 0 0 5px var(--ch-temp);
+    background: var(--chart-color);
+    box-shadow: 0 0 5px var(--chart-color);
   }
   .foot {
     font-size: 11px;
