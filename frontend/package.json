@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Live signal-monitor dashboard for the Nodemetry MQTT telemetry platform.",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
