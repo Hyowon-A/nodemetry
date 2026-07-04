@@ -1,0 +1,14 @@
+.git
+.gitignore
+.idea
+.mvn/wrapper/maven-wrapper.jar
+.env
+.env.*
+.DS_Store
+**/.DS_Store
+target
+build
+*.iml
+HELP.md
+run-local.sh
+mvnw.cmd
