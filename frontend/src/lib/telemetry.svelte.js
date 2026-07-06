@@ -43,6 +43,7 @@ export const store = $state({
   now: Date.now(),
   broker: 'hivemq-cloud · nodemetry/+/telemetry',
   selectedNodeId: null,
+  selectedRunIdsByNodeId: {},
   nodes: [],
   alerts: [],
   metrics: {
@@ -81,6 +82,30 @@ export function selectNode(id) {
   store.selectedNodeId = id;
 }
 
+export function selectedRunIdForNode(nodeId) {
+  return nodeId ? (store.selectedRunIdsByNodeId[nodeId] ?? null) : null;
+}
+
+export function selectedDashboardRunId() {
+  return selectedRunIdForNode(selectedDashboardNode()?.nodeId);
+}
+
+export function selectNodeRun(nodeId, runId) {
+  if (!nodeId) return;
+
+  if (runId) {
+    store.selectedRunIdsByNodeId = {
+      ...store.selectedRunIdsByNodeId,
+      [nodeId]: runId
+    };
+    return;
+  }
+
+  const next = { ...store.selectedRunIdsByNodeId };
+  delete next[nodeId];
+  store.selectedRunIdsByNodeId = next;
+}
+
 export function acknowledgeAlert(id) {
   const a = store.alerts.find((x) => x.id === id);
   if (a) a.acknowledged = true;
@@ -105,7 +130,8 @@ export function setAckHandler(fn) {
 export function setNodes(nodes) {
   for (const node of nodes) ensureNodeIngestion(node);
   store.nodes = nodes;
-  store.selectedNodeId = nodes[0]?.nodeId ?? null;
+  store.selectedNodeId =
+    nodes.find((node) => node.nodeId === store.selectedNodeId)?.nodeId ?? nodes[0]?.nodeId ?? null;
   recountNodes();
 }
 
@@ -150,6 +176,12 @@ export function emptyIngestionMetrics() {
     throughput: 0,
     lastMessageAt: null
   };
+}
+
+export function replaceNodeHistory(nodeId, history) {
+  const node = store.nodes.find((n) => n.nodeId === nodeId);
+  if (!node) return;
+  node.history = history;
 }
 
 function seedNodes() {
@@ -264,6 +296,7 @@ export function applyReading(r) {
   if (r.battery !== undefined && r.battery !== null) node.battery = r.battery;
   if (r.rssi !== undefined && r.rssi !== null) node.rssi = r.rssi;
   if (r.firmwareVersion) node.firmwareVersion = r.firmwareVersion;
+  if (r.runId) node.latestRunId = r.runId;
 
   node.latest = {
     temperature: r.temperatureFiltered ?? r.temperature ?? node.latest.temperature,
@@ -272,14 +305,17 @@ export function applyReading(r) {
     light: r.lightFiltered ?? r.light ?? node.latest.light
   };
 
-  pushPoint(node.history.t, t);
-  pushPoint(node.history.temperature, node.latest.temperature);
-  pushPoint(node.history.temperatureRaw, r.temperatureRaw ?? node.latest.temperature);
-  pushPoint(node.history.humidity, node.latest.humidity);
-  pushPoint(node.history.humidityRaw, r.humidityRaw ?? node.latest.humidity);
-  pushPoint(node.history.co2, node.latest.co2);
-  pushPoint(node.history.lightRaw, r.lightRaw ?? r.light ?? node.latest.light);
-  pushPoint(node.history.light, node.latest.light);
+  const selectedRunId = selectedRunIdForNode(node.nodeId);
+  if (!selectedRunId || r.runId === selectedRunId) {
+    pushPoint(node.history.t, t);
+    pushPoint(node.history.temperature, node.latest.temperature);
+    pushPoint(node.history.temperatureRaw, r.temperatureRaw ?? node.latest.temperature);
+    pushPoint(node.history.humidity, node.latest.humidity);
+    pushPoint(node.history.humidityRaw, r.humidityRaw ?? node.latest.humidity);
+    pushPoint(node.history.co2, node.latest.co2);
+    pushPoint(node.history.lightRaw, r.lightRaw ?? r.light ?? node.latest.light);
+    pushPoint(node.history.light, node.latest.light);
+  }
   ensureNodeIngestion(node).messagesSaved++;
   recountNodes();
 

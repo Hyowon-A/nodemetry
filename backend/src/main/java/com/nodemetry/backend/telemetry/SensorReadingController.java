@@ -14,13 +14,16 @@ public class SensorReadingController {
 
     private final SensorNodeRepository nodeRepository;
     private final SensorReadingRepository readingRepository;
+    private final RunTelemetryService runTelemetryService;
 
     public SensorReadingController(
             SensorNodeRepository nodeRepository,
-            SensorReadingRepository readingRepository
+            SensorReadingRepository readingRepository,
+            RunTelemetryService runTelemetryService
     ) {
         this.nodeRepository = nodeRepository;
         this.readingRepository = readingRepository;
+        this.runTelemetryService = runTelemetryService;
     }
 
     @GetMapping("/nodes")
@@ -48,5 +51,26 @@ public class SensorReadingController {
                 .stream()
                 .map(SensorReadingResponse::from)
                 .toList();
+    }
+
+    @GetMapping("/nodes/{nodeId}/runs")
+    public List<String> getRunsForNode(@PathVariable String nodeId) {
+        requireKnownNode(nodeId);
+        return readingRepository.findRunIdsByNodeIdOrderByLatestReadingDesc(nodeId);
+    }
+
+    @GetMapping("/nodes/{nodeId}/runs/{runId}/readings")
+    public List<SensorReadingResponse> getReadingsForNodeRun(
+            @PathVariable String nodeId,
+            @PathVariable String runId
+    ) {
+        requireKnownNode(nodeId);
+        return runTelemetryService.getReadingsForNodeRun(nodeId, runId);
+    }
+
+    private void requireKnownNode(String nodeId) {
+        if (!nodeRepository.existsByNodeId(nodeId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Node not found: " + nodeId);
+        }
     }
 }

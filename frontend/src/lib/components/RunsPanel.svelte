@@ -1,21 +1,10 @@
 <script>
   import { onMount } from 'svelte';
-  import { env } from '$env/dynamic/public';
   import { num } from '$lib/format.js';
+  import { fetchRuns, runStore } from '$lib/runs.svelte.js';
 
-  const API = (env.PUBLIC_API_BASE || 'http://localhost:8080').replace(/\/$/, '');
-
-  let runs = $state([]);
   let timer;
-
-  async function fetchRuns() {
-    try {
-      const r = await fetch(`${API}/api/v1/runs`);
-      if (r.ok) runs = await r.json();
-    } catch (e) {
-      console.warn('[nodemetry] runs fetch failed:', e.message);
-    }
-  }
+  const runs = $derived(runStore.runs);
 
   onMount(() => {
     fetchRuns();

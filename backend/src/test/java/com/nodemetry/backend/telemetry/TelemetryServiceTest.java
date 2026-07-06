@@ -77,8 +77,8 @@ class TelemetryServiceTest {
         assertThat(savedReading.getFirmwareVersion()).isEqualTo(message.firmwareVersion());
         assertThat(savedReading.getMeasuredAt()).isNotNull();
         assertThat(savedReading.getReceivedAt()).isNotNull();
-        verify(runRegistry).recordReceived();
-        verify(runRegistry).recordSaved();
+        verify(runRegistry).recordReceived(message.runId());
+        verify(runRegistry).recordSaved(message.runId());
         verify(runRegistry, never()).recordDupe();
     }
 
@@ -102,8 +102,8 @@ class TelemetryServiceTest {
         ArgumentCaptor<SensorReading> readingCaptor = ArgumentCaptor.forClass(SensorReading.class);
         verify(readingRepository).save(readingCaptor.capture());
         assertThat(readingCaptor.getValue().getMessageId()).isEqualTo(message.messageId());
-        verify(runRegistry).recordReceived();
-        verify(runRegistry).recordSaved();
+        verify(runRegistry).recordReceived(message.runId());
+        verify(runRegistry).recordSaved(message.runId());
         verify(runRegistry, never()).recordDupe();
     }
 
@@ -117,8 +117,8 @@ class TelemetryServiceTest {
         verify(readingRepository).existsByMessageId(message.messageId());
         verify(readingRepository, never()).save(any());
         verifyNoInteractions(nodeRepository);
-        verify(runRegistry).recordReceived();
-        verify(runRegistry).recordDupe();
+        verify(runRegistry).recordReceived(message.runId());
+        verify(runRegistry).recordDupe(message.runId());
         verify(runRegistry, never()).recordSaved();
     }
 
@@ -167,6 +167,30 @@ class TelemetryServiceTest {
         assertThatThrownBy(() -> service.processTelemetry(message))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("nodeId is required");
+
+        verifyNoInteractions(readingRepository, nodeRepository, runRegistry);
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", "\t"})
+    void processTelemetryRejectsMissingRunId(String runId) {
+        TelemetryMessage message = new TelemetryMessage(
+                "message-001",
+                "node-001",
+                runId,
+                23.5,
+                48.2,
+                615.0,
+                87.0,
+                -62.0,
+                "firmware-1.0.0",
+                4200.0
+        );
+
+        assertThatThrownBy(() -> service.processTelemetry(message))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("runId is required");
 
         verifyNoInteractions(readingRepository, nodeRepository, runRegistry);
     }

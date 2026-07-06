@@ -1,5 +1,8 @@
 HELP.md
 target/
+
+# MQTT client local persistence store (runtime artifact)
+nodemetry-backend-local-ssl*/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/

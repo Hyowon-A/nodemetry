@@ -82,6 +82,7 @@ class MqttMessageHandlerTest {
                 {
                   "messageId": "message-001",
                   "nodeId": "test-node-001",
+                  "runId": "20260706T132045Z",
                   "temperature": 23.5,
                   "humidity": 48.2,
                   "co2": 615.0,
@@ -107,6 +108,7 @@ class MqttMessageHandlerTest {
                 {
                   "messageId": "message-002",
                   "nodeId": "test-node-001",
+                  "runId": "20260706T132045Z",
                   "temperature": 23.5,
                   "humidity": 48.2,
                   "co2": 615.0,
@@ -130,6 +132,7 @@ class MqttMessageHandlerTest {
                 {
                   "messageId": "message-001",
                   "nodeId": "test-node-001",
+                  "runId": "20260706T132045Z",
                   "temperature": 23.5,
                   "humidity": 48.2,
                   "co2": 615.0,

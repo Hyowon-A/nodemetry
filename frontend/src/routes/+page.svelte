@@ -7,6 +7,7 @@
   import IngestionMetrics from '$lib/components/IngestionMetrics.svelte';
   import NodeTable from '$lib/components/NodeTable.svelte';
   import NodeDetails from '$lib/components/NodeDetails.svelte';
+  import NodeRunSelector from '$lib/components/NodeRunSelector.svelte';
 
   const node = $derived(selectedDashboardNode());
   const h = $derived(node?.history ?? emptyHistory());
@@ -28,10 +29,11 @@
 
     <section class="telemetry-column">
       <div class="panel-bare" style:--stagger="1"><NodeDetails /></div>
+      <div class="panel-bare" style:--stagger="2"><NodeRunSelector /></div>
       <section class="readings" aria-label="Reading charts">
 
         <div class="charts">
-          <div class="panel wide comparison" style:--stagger="2" style:--chart-color="var(--ch-temp)">
+          <div class="panel wide comparison" style:--stagger="3" style:--chart-color="var(--ch-temp)">
             <div class="sig-head">
               <span class="eyebrow">raw vs filtered · temperature</span>
               <div class="legend mono">
@@ -53,7 +55,7 @@
             />
           </div>
 
-          <div class="panel wide comparison" style:--stagger="3" style:--chart-color="var(--ch-humid)">
+          <div class="panel wide comparison" style:--stagger="4" style:--chart-color="var(--ch-humid)">
             <div class="sig-head">
               <span class="eyebrow">raw vs filtered · humidity</span>
               <div class="legend mono">
@@ -75,7 +77,7 @@
             />
           </div>
 
-          <div class="panel wide comparison" style:--stagger="4" style:--chart-color="var(--ch-light)">
+          <div class="panel wide comparison" style:--stagger="5" style:--chart-color="var(--ch-light)">
             <div class="sig-head">
               <span class="eyebrow">raw vs filtered · light</span>
               <div class="legend mono">
@@ -100,8 +102,8 @@
       </section>
 
       <div class="support-grid">
-        <div class="panel-bare" style:--stagger="7"><AlertsPanel /></div>
-        <div class="panel-bare" style:--stagger="8"><IngestionMetrics /></div>
+        <div class="panel-bare" style:--stagger="8"><AlertsPanel /></div>
+        <div class="panel-bare" style:--stagger="9"><IngestionMetrics /></div>
       </div>
     </section>
   </div>
