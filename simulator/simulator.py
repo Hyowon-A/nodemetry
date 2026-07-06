@@ -27,6 +27,7 @@ Requires: pip install "paho-mqtt>=2.0"
 """
 
 import argparse
+import email.utils
 import json
 import os
 import random
@@ -35,8 +36,9 @@ import ssl
 import sys
 import threading
 import time
-import uuid
 from dataclasses import dataclass, field
+from datetime import timezone
+from urllib.request import Request, urlopen
 from dotenv import load_dotenv
 
 import paho.mqtt.client as mqtt
@@ -105,6 +107,7 @@ class VirtualNode:
         return {
             "messageId": f"{self.node_id}-{self.run_id}-{message_id}",
             "nodeId": self.node_id,
+            "runId": self.run_id,
             "temperature": round(self.temperature, 2),
             "humidity": round(self.humidity, 2),
             "co2": round(self.co2, 1) if self.has_co2 else None,
@@ -117,6 +120,42 @@ class VirtualNode:
 
 def topic(prefix, node_id, suffix):
     return f"{prefix}/{node_id}/{suffix}"
+
+
+INTERNET_TIME_URL = "https://www.google.com/generate_204"
+
+
+def format_run_id_from_time_tuple(time_tuple):
+    return time.strftime("%Y%m%dT%H%M%SZ", time_tuple)
+
+
+def local_utc_run_id():
+    return format_run_id_from_time_tuple(time.gmtime())
+
+
+def internet_utc_run_id(timeout=3):
+    request = Request(
+        INTERNET_TIME_URL,
+        headers={"User-Agent": "nodemetry-simulator/1.0"},
+        method="HEAD",
+    )
+    with urlopen(request, timeout=timeout) as response:
+        date_header = response.headers.get("Date")
+    if not date_header:
+        raise RuntimeError("missing Date header")
+    internet_time = email.utils.parsedate_to_datetime(date_header)
+    return internet_time.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def default_run_id():
+    try:
+        return internet_utc_run_id()
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"warning: online UTC lookup failed ({exc}); using local UTC clock",
+            file=sys.stderr,
+        )
+    return local_utc_run_id()
 
 
 def make_client(client_id, args):
@@ -257,12 +296,21 @@ def parse_args():
     p.add_argument("--password", default=os.environ.get("MQTT_PASSWORD"))
     p.add_argument("--prefix", default="nodemetry", help="topic root, e.g. nodemetry/{nodeId}/telemetry")
     p.add_argument("--node-prefix", default="node", help="virtual node id prefix")
-    p.add_argument("--run-id", default=uuid.uuid4().hex[:12], help="run id included in messageId (default: random)")
+    p.add_argument(
+        "--run-id",
+        help=(
+            "run id sent as runId and included in messageId "
+            "(default: online UTC timestamp, e.g. 20260706T132045Z)"
+        ),
+    )
     p.add_argument("--duration", type=float, default=0, help="stop after N seconds (0 = run until Ctrl+C)")
     p.add_argument("--duplicate-rate", type=float, default=0.0, help="fraction (0-1) of messages re-sent with same messageId")
     p.add_argument("--shared", action="store_true", help="multiplex nodes over a few connections (for capped brokers)")
     p.add_argument("--connections", type=int, default=5, help="connections to use in --shared mode")
-    return p.parse_args()
+    args = p.parse_args()
+    if args.run_id is None:
+        args.run_id = default_run_id()
+    return args
 
 
 def main():

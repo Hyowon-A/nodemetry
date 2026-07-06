@@ -7,7 +7,9 @@ import java.time.Instant;
 @Table(
         name = "sensor_readings",
         indexes = {
-                @Index(name = "idx_readings_node_time", columnList = "node_id, received_at")
+                @Index(name = "idx_readings_node_time", columnList = "node_id, received_at"),
+                @Index(name = "idx_readings_run_time", columnList = "run_id, received_at"),
+                @Index(name = "idx_readings_node_run_time", columnList = "node_id, run_id, received_at")
         }
 )
 public class SensorReading {
@@ -21,6 +23,9 @@ public class SensorReading {
 
     @Column(name = "node_id", nullable = false)
     private String nodeId;
+
+    @Column(name = "run_id")
+    private String runId;
 
     private Double temperature;
     private Double humidity;
@@ -43,6 +48,7 @@ public class SensorReading {
     public SensorReading(
             String messageId,
             String nodeId,
+            String runId,
             Double temperature,
             Double humidity,
             Double co2,
@@ -53,6 +59,7 @@ public class SensorReading {
     ) {
         this.messageId = messageId;
         this.nodeId = nodeId;
+        this.runId = runId;
         this.temperature = temperature;
         this.humidity = humidity;
         this.co2 = co2;
@@ -74,6 +81,10 @@ public class SensorReading {
 
     public String getNodeId() {
         return nodeId;
+    }
+
+    public String getRunId() {
+        return runId;
     }
 
     public Double getTemperature() {

@@ -30,7 +30,9 @@ import {
   setLocalPipeline,
   setAckHandler,
   emptyHistory,
-  emptyLatest
+  emptyLatest,
+  replaceNodeHistory,
+  selectedRunIdForNode
 } from '$lib/telemetry.svelte.js';
 
 const API = (env.PUBLIC_API_BASE || 'http://localhost:8080').replace(/\/$/, '');
@@ -60,30 +62,65 @@ function mapNode(n) {
   };
 }
 
+function readingsPath(nodeId, runId) {
+  const encodedNodeId = encodeURIComponent(nodeId);
+  return runId
+    ? `/api/v1/nodes/${encodedNodeId}/runs/${encodeURIComponent(runId)}/readings`
+    : `/api/v1/nodes/${encodedNodeId}/readings`;
+}
+
+function readingTime(reading) {
+  return ms(reading.measuredAt ?? reading.receivedAt);
+}
+
+function historyFromRows(rows) {
+  const h = emptyHistory();
+  for (const r of rows) {
+    h.t.push(readingTime(r));
+    h.temperature.push(r.temperature ?? null);
+    h.temperatureRaw.push(r.temperatureRaw ?? r.temperature ?? null);
+    h.humidity.push(r.humidity ?? null);
+    h.humidityRaw.push(r.humidityRaw ?? r.humidity ?? null);
+    h.co2.push(r.co2 ?? null);
+    h.lightRaw.push(r.lightRaw ?? r.light ?? null);
+    h.light.push(r.lightFiltered ?? r.light ?? null);
+  }
+  return h;
+}
+
+export async function loadNodeHistory(nodeId, runId = null) {
+  const rows = await getJSON(readingsPath(nodeId, runId));
+  const recent = rows
+    .sort((a, b) => readingTime(a) - readingTime(b))
+    .slice(-config.WINDOW);
+
+  if (selectedRunIdForNode(nodeId) !== (runId ?? null)) return 0;
+
+  replaceNodeHistory(nodeId, historyFromRows(recent));
+  return recent.length;
+}
+
 async function seedHistory(node) {
   try {
-    const rows = await getJSON(`/api/v1/nodes/${node.nodeId}/readings`);
-    rows.sort((a, b) => ms(a.measuredAt) - ms(b.measuredAt)); // oldest → newest
-    const recent = rows.slice(-config.WINDOW);
+    const count = await loadNodeHistory(node.nodeId);
     const h = node.history;
-    for (const r of recent) {
-      h.t.push(ms(r.measuredAt));
-      h.temperature.push(r.temperature ?? null);
-      h.temperatureRaw.push(r.temperature ?? null);
-      h.humidity.push(r.humidity ?? null);
-      h.humidityRaw.push(r.humidity ?? null);
-      h.co2.push(r.co2 ?? null);
-      h.lightRaw.push(r.lightRaw ?? r.light ?? null);
-      h.light.push(r.lightFiltered ?? r.light ?? null);
-    }
-    const lastRow = recent[recent.length - 1];
+    const lastIndex = count - 1;
+    const lastRow =
+      lastIndex >= 0
+        ? {
+            temperature: h.temperature[lastIndex],
+            humidity: h.humidity[lastIndex],
+            co2: h.co2[lastIndex],
+            light: h.light[lastIndex]
+          }
+        : null;
     if (lastRow) {
       const prev = node.latest;
       node.latest = {
         temperature: lastRow.temperature ?? prev.temperature,
         humidity: lastRow.humidity ?? prev.humidity,
         co2: lastRow.co2 ?? prev.co2,
-        light: lastRow.lightFiltered ?? lastRow.light ?? prev.light
+        light: lastRow.light ?? prev.light
       };
     }
   } catch (e) {
@@ -133,6 +170,7 @@ function openStomp() {
           const r = JSON.parse(message.body);
           applyReading({
             messageId: r.messageId,
+            runId: r.runId,
             nodeId: r.nodeId,
             measuredAt: ms(r.measuredAt ?? r.receivedAt),
             temperature: r.temperature,

@@ -31,11 +31,11 @@ public class TelemetryService {
     public void processTelemetry(TelemetryMessage message) {
         validate(message);
 
-        runRegistry.recordReceived();
+        runRegistry.recordReceived(message.runId());
 
         // MQTT QoS 1 may redeliver messages, so skip readings already stored
         if (readingRepository.existsByMessageId(message.messageId())) {
-            runRegistry.recordDupe();
+            runRegistry.recordDupe(message.runId());
             System.out.println("Duplicate message skipped: " + message.messageId());
             return;
         }
@@ -56,6 +56,7 @@ public class TelemetryService {
         SensorReading reading = new SensorReading(
                 message.messageId(),
                 message.nodeId(),
+                message.runId(),
                 message.temperature(),
                 message.humidity(),
                 message.co2(),
@@ -66,7 +67,7 @@ public class TelemetryService {
         );
 
         readingRepository.save(reading);
-        runRegistry.recordSaved();
+        runRegistry.recordSaved(message.runId());
 
         SensorReadingResponse response = SensorReadingResponse.from(reading);
 
@@ -90,6 +91,10 @@ public class TelemetryService {
 
         if (message.nodeId() == null || message.nodeId().isBlank()) {
             throw new IllegalArgumentException("nodeId is required");
+        }
+
+        if (message.runId() == null || message.runId().isBlank()) {
+            throw new IllegalArgumentException("runId is required");
         }
 
         if (message.firmwareVersion() == null || message.firmwareVersion().isBlank()) {

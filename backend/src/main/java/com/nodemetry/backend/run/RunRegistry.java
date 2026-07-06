@@ -45,32 +45,49 @@ public class RunRegistry {
     public synchronized TestRun endRun(String runId) {
         return repository.findByRunId(runId).map(run -> {
             run.setEndedAt(Instant.now());
-            run.setTotalReceived(received.get());
-            run.setTotalSaved(saved.get());
-            run.setDuplicatesSkipped(dupes.get());
-            if (runId.equals(currentRunId)) currentRunId = null;
+            if (runId.equals(currentRunId)) {
+                run.setTotalReceived(received.get());
+                run.setTotalSaved(saved.get());
+                run.setDuplicatesSkipped(dupes.get());
+                currentRunId = null;
+            }
             return repository.save(run);
         }).orElseThrow(() -> new IllegalArgumentException("Run not found: " + runId));
     }
 
     public void recordReceived() {
-        String runId = currentRunId;
+        recordReceived(currentRunId);
+    }
+
+    public void recordReceived(String runId) {
         if (runId != null && repository.incrementTotalReceived(runId) > 0) {
-            received.incrementAndGet();
+            if (runId.equals(currentRunId)) {
+                received.incrementAndGet();
+            }
         }
     }
 
     public void recordSaved() {
-        String runId = currentRunId;
+        recordSaved(currentRunId);
+    }
+
+    public void recordSaved(String runId) {
         if (runId != null && repository.incrementTotalSaved(runId) > 0) {
-            saved.incrementAndGet();
+            if (runId.equals(currentRunId)) {
+                saved.incrementAndGet();
+            }
         }
     }
 
     public void recordDupe() {
-        String runId = currentRunId;
+        recordDupe(currentRunId);
+    }
+
+    public void recordDupe(String runId) {
         if (runId != null && repository.incrementDuplicatesSkipped(runId) > 0) {
-            dupes.incrementAndGet();
+            if (runId.equals(currentRunId)) {
+                dupes.incrementAndGet();
+            }
         }
     }
 

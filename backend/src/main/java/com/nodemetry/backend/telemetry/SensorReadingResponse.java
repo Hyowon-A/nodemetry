@@ -5,6 +5,7 @@ import java.time.Instant;
 public record SensorReadingResponse(
         String messageId,
         String nodeId,
+        String runId,
         Double temperature,
         Double humidity,
         Double co2,
@@ -19,6 +20,7 @@ public record SensorReadingResponse(
         return new SensorReadingResponse(
                 reading.getMessageId(),
                 reading.getNodeId(),
+                reading.getRunId(),
                 reading.getTemperature(),
                 reading.getHumidity(),
                 reading.getCo2(),

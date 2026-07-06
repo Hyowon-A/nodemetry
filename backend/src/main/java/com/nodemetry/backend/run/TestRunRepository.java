@@ -11,6 +11,7 @@ import java.util.Optional;
 
 public interface TestRunRepository extends JpaRepository<TestRun, Long> {
     Optional<TestRun> findByRunId(String runId);
+    boolean existsByRunId(String runId);
     List<TestRun> findAllByOrderByStartedAtDesc();
 
     @Transactional
