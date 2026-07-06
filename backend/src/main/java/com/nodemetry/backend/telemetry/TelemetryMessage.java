@@ -4,6 +4,7 @@ package com.nodemetry.backend.telemetry;
 public record TelemetryMessage(
         String messageId,
         String nodeId,
+        String runId,
         Double temperature,
         Double humidity,
         Double co2,

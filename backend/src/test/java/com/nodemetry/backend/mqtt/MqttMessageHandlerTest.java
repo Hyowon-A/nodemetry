@@ -37,6 +37,7 @@ class MqttMessageHandlerTest {
                 {
                   "messageId": "message-001",
                   "nodeId": "test-node-001",
+                  "runId": "20260706T132045Z",
                   "temperature": 23.5,
                   "humidity": 48.2,
                   "co2": 615.0,
@@ -55,6 +56,7 @@ class MqttMessageHandlerTest {
 
         assertThat(message.messageId()).isEqualTo("message-001");
         assertThat(message.nodeId()).isEqualTo("test-node-001");
+        assertThat(message.runId()).isEqualTo("20260706T132045Z");
         assertThat(message.temperature()).isEqualTo(23.5);
         assertThat(message.humidity()).isEqualTo(48.2);
         assertThat(message.co2()).isEqualTo(615.0);

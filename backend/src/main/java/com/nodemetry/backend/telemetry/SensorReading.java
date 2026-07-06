@@ -22,6 +22,9 @@ public class SensorReading {
     @Column(name = "node_id", nullable = false)
     private String nodeId;
 
+    @Column(name = "run_id")
+    private String runId;
+
     private Double temperature;
     private Double humidity;
     private Double co2;
@@ -43,6 +46,7 @@ public class SensorReading {
     public SensorReading(
             String messageId,
             String nodeId,
+            String runId,
             Double temperature,
             Double humidity,
             Double co2,
@@ -53,6 +57,7 @@ public class SensorReading {
     ) {
         this.messageId = messageId;
         this.nodeId = nodeId;
+        this.runId = runId;
         this.temperature = temperature;
         this.humidity = humidity;
         this.co2 = co2;
@@ -74,6 +79,10 @@ public class SensorReading {
 
     public String getNodeId() {
         return nodeId;
+    }
+
+    public String getRunId() {
+        return runId;
     }
 
     public Double getTemperature() {

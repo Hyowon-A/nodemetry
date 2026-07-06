@@ -56,6 +56,7 @@ public class TelemetryService {
         SensorReading reading = new SensorReading(
                 message.messageId(),
                 message.nodeId(),
+                message.runId(),
                 message.temperature(),
                 message.humidity(),
                 message.co2(),

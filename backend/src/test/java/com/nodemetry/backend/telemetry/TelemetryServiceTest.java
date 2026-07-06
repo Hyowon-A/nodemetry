@@ -67,6 +67,7 @@ class TelemetryServiceTest {
 
         assertThat(savedReading.getMessageId()).isEqualTo(message.messageId());
         assertThat(savedReading.getNodeId()).isEqualTo(message.nodeId());
+        assertThat(savedReading.getRunId()).isEqualTo(message.runId());
         assertThat(savedReading.getTemperature()).isEqualTo(message.temperature());
         assertThat(savedReading.getHumidity()).isEqualTo(message.humidity());
         assertThat(savedReading.getCo2()).isEqualTo(message.co2());
@@ -124,7 +125,7 @@ class TelemetryServiceTest {
     @Test
     void processTelemetryStoresNullLightForNodesWithoutLightSensor() {
         TelemetryMessage message = new TelemetryMessage(
-                "message-002", "node-001", 23.5, 48.2, 615.0, 87.0, -62.0, "firmware-1.0.0", null
+                "message-002", "node-001", "run-001", 23.5, 48.2, 615.0, 87.0, -62.0, "firmware-1.0.0", null
         );
         when(readingRepository.existsByMessageId(message.messageId())).thenReturn(false);
         when(nodeRepository.findByNodeId(message.nodeId())).thenReturn(Optional.empty());
@@ -195,6 +196,7 @@ class TelemetryServiceTest {
         return new TelemetryMessage(
                 messageId,
                 nodeId,
+                "run-001",
                 23.5,
                 48.2,
                 615.0,
