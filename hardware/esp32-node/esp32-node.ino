@@ -10,10 +10,10 @@ const char* ssid = "YOUR_WIFI_ADDRESS";
 const char* wifi_password = "WIFI_PASSWORD";
 
 // MQTT details
-const char* mqtt_server = "9741496ab663426dba9cea75f1df7986.s1.eu.hivemq.cloud";
+const char* mqtt_server = "MQTT_SERVER";
 const int mqtt_port = 8883;
-const char* mqtt_username = "nodemetryAdmin";
-const char* mqtt_password = "Admin1234";
+const char* mqtt_username = "MQTT_USERNAME";
+const char* mqtt_password = "MQTT_PASSWORD";
 
 // Node details
 const char* nodeId = "node-001";
