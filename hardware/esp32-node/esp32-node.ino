@@ -4,24 +4,27 @@
 #include <Wire.h>
 #include <Adafruit_SHT4x.h>
 #include <BH1750.h>
+#include <time.h>
 
 // Wi-Fi details
-const char* ssid = "YOUR_WIFI_ADDRESS";
+// Better: move these to a secrets/env file before committing
+const char* ssid = "WIFI_ADDRESS";
 const char* wifi_password = "WIFI_PASSWORD";
 
 // MQTT details
+// Better: move these to a secrets/env file before committing
 const char* mqtt_server = "MQTT_SERVER";
 const int mqtt_port = 8883;
 const char* mqtt_username = "MQTT_USERNAME";
 const char* mqtt_password = "MQTT_PASSWORD";
 
 // Node details
-const char* nodeId = "node-001";
-const char* firmwareVersion = "firmware-1.0.0";
-const char* topic = "nodemetry/node-001/telemetry";
+String nodeId = "node-002";
+String runId;
+unsigned long sequenceNumber = 0;
 
-// Message counter for messageId
-unsigned long messageCounter = 1;
+const char* firmwareVersion = "firmware-1.0.0";
+const char* topic = "nodemetry/node-002/telemetry";
 
 // MQTT client
 WiFiClientSecure espClient;
@@ -30,6 +33,31 @@ PubSubClient client(espClient);
 // Sensors
 Adafruit_SHT4x sht4 = Adafruit_SHT4x();
 BH1750 lightMeter;
+
+String createRunId() {
+  configTime(0, 0, "pool.ntp.org", "time.google.com");
+
+  struct tm timeinfo;
+
+  while (!getLocalTime(&timeinfo)) {
+    Serial.println("Waiting for NTP time...");
+    delay(1000);
+  }
+
+  char buffer[32];
+  strftime(buffer, sizeof(buffer), "%Y%m%dT%H%M%SZ", &timeinfo);
+
+  return String(buffer);
+}
+
+String createMessageId() {
+  sequenceNumber++;
+
+  char seqBuffer[16];
+  sprintf(seqBuffer, "%06lu", sequenceNumber);
+
+  return nodeId + "-" + runId + "-" + String(seqBuffer);
+}
 
 void connectWiFi() {
   Serial.println("Connecting to Wi-Fi...");
@@ -46,13 +74,18 @@ void connectWiFi() {
   Serial.println(WiFi.localIP());
   Serial.print("RSSI: ");
   Serial.println(WiFi.RSSI());
+
+  runId = createRunId();
+
+  Serial.print("Run ID: ");
+  Serial.println(runId);
 }
 
 void connectMQTT() {
   while (!client.connected()) {
     Serial.println("Connecting to MQTT...");
 
-    String clientId = "esp32-node-001-";
+    String clientId = "esp32-node-002-";
     clientId += String(random(0xffff), HEX);
 
     if (client.connect(clientId.c_str(), mqtt_username, mqtt_password)) {
@@ -123,43 +156,24 @@ void loop() {
   // Temporary fake battery percentage until you add battery measurement hardware
   float battery = 87.0;
 
-  // Create messageId like node-001-000001
-  char messageId[25];
-  snprintf(messageId, sizeof(messageId), "%s-%06lu", nodeId, messageCounter);
+  String messageId = createMessageId();
 
   String payload = "{";
-  payload += "\"messageId\":\"";
-  payload += messageId;
-  payload += "\",";
-  payload += "\"nodeId\":\"";
-  payload += nodeId;
-  payload += "\",";
-  payload += "\"temperature\":";
-  payload += String(temperature, 2);
-  payload += ",";
-  payload += "\"humidity\":";
-  payload += String(humidityValue, 2);
-  payload += ",";
-  payload += "\"battery\":";
-  payload += String(battery, 1);
-  payload += ",";
-  payload += "\"light\":";
-  payload += String(light, 2);
-  payload += ",";
-  payload += "\"rssi\":";
-  payload += String(rssi, 1);
-  payload += ",";
-  payload += "\"firmwareVersion\":\"";
-  payload += firmwareVersion;
-  payload += "\"";
+  payload += "\"messageId\":\"" + messageId + "\",";
+  payload += "\"nodeId\":\"" + nodeId + "\",";
+  payload += "\"runId\":\"" + runId + "\",";
+  payload += "\"temperature\":" + String(temperature, 2) + ",";
+  payload += "\"humidity\":" + String(humidityValue, 2) + ",";
+  payload += "\"battery\":" + String(battery, 1) + ",";
+  payload += "\"light\":" + String(light, 1) + ",";
+  payload += "\"rssi\":" + String(rssi, 0) + ",";
+  payload += "\"firmwareVersion\":\"" + String(firmwareVersion) + "\"";
   payload += "}";
 
   Serial.print("Publishing real sensor data: ");
   Serial.println(payload);
 
   client.publish(topic, payload.c_str());
-
-  messageCounter++;
 
   delay(10000);
 }
