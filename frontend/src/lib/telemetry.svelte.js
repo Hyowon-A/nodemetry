@@ -423,9 +423,9 @@ function makeReading(node) {
     battery: +(node.battery - rnd(0, 0.05)).toFixed(2),
     rssi: Math.round(clamp(node.rssi + rnd(-3, 3), -92, -45)),
     firmwareVersion: node.firmwareVersion,
-    lightRaw: b.l != null ? Math.round(clamp(b.l + lNoise, 0, 100000)) : null,
-    lightFiltered: b.l != null ? Math.round(b.l) : null,
-    light: b.l != null ? Math.round(b.l) : null
+    lightRaw: b.l != null ? +clamp(b.l + lNoise, 0, 100000).toFixed(2) : null,
+    lightFiltered: b.l != null ? +b.l.toFixed(2) : null,
+    light: b.l != null ? +b.l.toFixed(2) : null
   };
 }
 
