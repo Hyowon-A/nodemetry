@@ -46,7 +46,7 @@
               height={150}
               unit="°C"
               value={last(h.temperature)}
-              decimals={1}
+              decimals={2}
               timestamps={h.t}
               series={[
                 { name: 'raw', points: h.temperatureRaw, color: 'var(--ch-temp)', faint: true, width: 1.4 },
@@ -68,7 +68,7 @@
               height={150}
               unit="%"
               value={last(h.humidity)}
-              decimals={0}
+              decimals={2}
               timestamps={h.t}
               series={[
                 { name: 'raw', points: h.humidityRaw, color: 'var(--ch-humid)', faint: true, width: 1.4 },
@@ -90,7 +90,7 @@
               height={150}
               unit="lux"
               value={last(h.light)}
-              decimals={0}
+              decimals={2}
               timestamps={h.t}
               series={[
                 { name: 'raw', points: h.lightRaw, color: 'var(--ch-light)', faint: true, width: 1.4 },
