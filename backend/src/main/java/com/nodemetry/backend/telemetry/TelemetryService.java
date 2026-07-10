@@ -2,7 +2,6 @@ package com.nodemetry.backend.telemetry;
 
 import com.nodemetry.backend.node.SensorNode;
 import com.nodemetry.backend.node.SensorNodeRepository;
-import com.nodemetry.backend.run.RunRegistry;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,32 +12,25 @@ public class TelemetryService {
     private final SensorReadingRepository readingRepository;
     private final SensorNodeRepository nodeRepository;
     private final SimpMessagingTemplate messagingTemplate;
-    private final RunRegistry runRegistry;
 
     public TelemetryService(
             SensorReadingRepository readingRepository,
             SensorNodeRepository nodeRepository,
-            SimpMessagingTemplate messagingTemplate,
-            RunRegistry runRegistry
+            SimpMessagingTemplate messagingTemplate
     ) {
         this.readingRepository = readingRepository;
         this.nodeRepository = nodeRepository;
         this.messagingTemplate = messagingTemplate;
-        this.runRegistry = runRegistry;
     }
 
+    // Dedup is handled by the unique constraint on SensorReading.messageId: because
+    // the id is IDENTITY-generated, save() flushes the INSERT immediately, so a
+    // redelivered (QoS 1) messageId throws DataIntegrityViolationException here and
+    // the caller records it as a duplicate. That avoids an existsBy SELECT on the
+    // hot path per message.
     @Transactional
     public void processTelemetry(TelemetryMessage message) {
         validate(message);
-
-        runRegistry.recordReceived(message.runId());
-
-        // MQTT QoS 1 may redeliver messages, so skip readings already stored
-        if (readingRepository.existsByMessageId(message.messageId())) {
-            runRegistry.recordDupe(message.runId());
-            System.out.println("Duplicate message skipped: " + message.messageId());
-            return;
-        }
 
         // Reuse the existing node, or create it on first telemetry
         SensorNode node = nodeRepository
@@ -67,7 +59,6 @@ public class TelemetryService {
         );
 
         readingRepository.save(reading);
-        runRegistry.recordSaved(message.runId());
 
         SensorReadingResponse response = SensorReadingResponse.from(reading);
 
@@ -80,8 +71,6 @@ public class TelemetryService {
                 "/topic/readings",
                 response
         );
-
-        System.out.println("Saved telemetry: " + message.messageId());
     }
 
     private void validate(TelemetryMessage message) {

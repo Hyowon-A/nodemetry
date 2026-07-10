@@ -24,8 +24,11 @@ public class RunController {
     }
 
     @PatchMapping("/{runId}/end")
-    public TestRunResponse end(@PathVariable String runId) {
-        return TestRunResponse.from(registry.endRun(runId));
+    public TestRunResponse end(
+            @PathVariable String runId,
+            @RequestBody(required = false) EndRunRequest req
+    ) {
+        return TestRunResponse.from(registry.endRun(runId, req));
     }
 
     @GetMapping

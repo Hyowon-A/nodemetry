@@ -5,6 +5,55 @@
   import { store } from '$lib/telemetry.svelte.js';
   import { num, timeAgo } from '$lib/format.js';
 
+  /**
+   * @typedef {Object} VNode
+   * @property {string} nodeId
+   * @property {string} [name]
+   * @property {string} status
+   * @property {number} [lastSeenAt]
+   * @property {number|null} [rssi]
+   * @property {number|null} [battery]
+   * @property {string} [firmwareVersion]
+   * @property {{ temperature?: number|null, humidity?: number|null, co2?: number|null, light?: number|null }} [latest]
+   * @property {{ lastMessageAt?: number|null, throughput?: number }} [ingestion]
+   *
+   * @typedef {Object} LastExit
+   * @property {number|null} code
+   * @property {string|null} signal
+   * @property {number} at
+   * @property {string} [error]
+   *
+   * @typedef {Object} SimulatorOptions
+   * @property {number} nodes
+   * @property {number} interval
+   * @property {number} duration
+   * @property {number} qos
+   * @property {boolean} shared
+   * @property {number} connections
+   * @property {number} duplicateRate
+   *
+   * @typedef {Object} SimulatorStatus
+   * @property {boolean} [running]
+   * @property {boolean} [draining]
+   * @property {number|null} [startedAt]
+   * @property {string|null} [currentRunId]
+   * @property {string} [logTail]
+   * @property {LastExit|null} [lastExit]
+   * @property {SimulatorOptions} [options]
+   *
+   * @typedef {Object} TesterState
+   * @property {boolean} running
+   * @property {boolean} draining
+   * @property {boolean} busy
+   * @property {string} error
+   * @property {number|null} startedAt
+   * @property {string|null} currentRunId
+   * @property {string} logTail
+   * @property {LastExit|null} lastExit
+   * @property {SimulatorOptions} options
+   */
+
+  /** @type {SimulatorOptions} */
   const defaultOptions = {
     nodes: 10,
     interval: 10,
@@ -15,8 +64,10 @@
     duplicateRate: 0
   };
 
+  /** @type {TesterState} */
   let tester = $state({
     running: false,
+    draining: false,
     busy: false,
     error: '',
     startedAt: null,
@@ -27,35 +78,43 @@
   });
   let simulatorOptionsLoaded = false;
 
+  /** @param {VNode} node */
   function isVirtualNode(node) {
     return node.nodeId?.startsWith('vnode-');
   }
 
+  /** @param {VNode} a @param {VNode} b */
   function compareNodeIds(a, b) {
     return a.nodeId.localeCompare(b.nodeId, undefined, { numeric: true });
   }
 
+  /** @param {Array<number|null|undefined>} values */
   function avg(values) {
-    const real = values.filter((value) => value !== null && value !== undefined && !Number.isNaN(value));
+    const real = /** @type {number[]} */ (
+      values.filter((value) => value !== null && value !== undefined && !Number.isNaN(value))
+    );
     if (!real.length) return null;
     return real.reduce((total, value) => total + value, 0) / real.length;
   }
 
+  /** @param {number} value */
   function pct(value) {
     return `${num(value * 100, 0)}%`;
   }
 
+  /** @param {string|null} runId */
   function runIdLabel(runId) {
     return runId ? runId.slice(0, 8) : 'none';
   }
 
+  /** @param {number} ms */
   function durationLabel(ms) {
     if (!ms) return '0s';
     if (ms < 60000) return `${Math.floor(ms / 1000)}s`;
     return `${(ms / 60000).toFixed(1)}m`;
   }
 
-  const virtualNodes = $derived(store.nodes.filter(isVirtualNode).sort(compareNodeIds));
+  const virtualNodes = /** @type {VNode[]} */ ($derived(store.nodes.filter(isVirtualNode).sort(compareNodeIds)));
   const onlineVirtualNodes = $derived(virtualNodes.filter((node) => node.status === 'online').length);
   const offlineVirtualNodes = $derived(virtualNodes.length - onlineVirtualNodes);
   const lastVirtualSeenAt = $derived(Math.max(0, ...virtualNodes.map((node) => node.lastSeenAt || 0)));
@@ -63,6 +122,16 @@
   const avgVirtualBattery = $derived(avg(virtualNodes.map((node) => node.battery)));
   const expectedRate = $derived(
     tester.options.interval > 0 ? tester.options.nodes / tester.options.interval : 0
+  );
+  // Sum the live per-node throughput (the global store.metrics.throughput is
+  // only computed by the mock feed, so it stays 0 against the real backend).
+  // Skip nodes with no message in the last 5s so a stopped run reads 0.
+  const observedRate = $derived(
+    virtualNodes.reduce((total, node) => {
+      const ingestion = node.ingestion;
+      if (!ingestion?.lastMessageAt || store.now - ingestion.lastMessageAt > 5000) return total;
+      return total + (ingestion.throughput ?? 0);
+    }, 0)
   );
   const runAge = $derived(tester.startedAt ? store.now - tester.startedAt : 0);
   const summaryCards = $derived([
@@ -73,11 +142,13 @@
     { label: 'avg rssi', value: avgVirtualRssi == null ? 'none' : `${num(avgVirtualRssi, 0)} dBm` },
     { label: 'avg battery', value: avgVirtualBattery == null ? 'none' : `${num(avgVirtualBattery, 0)}%` },
     { label: 'target rate', value: `${num(expectedRate, 1)} msg/s`, accent: tester.running },
-    { label: 'observed rate', value: `${num(store.metrics.throughput, 1)} msg/s`, accent: store.metrics.throughput > 0 }
+    { label: 'observed rate', value: `${num(observedRate, 1)} msg/s`, accent: observedRate > 0 }
   ]);
 
+  /** @param {SimulatorStatus} data */
   function applySimulatorStatus(data = {}) {
     tester.running = Boolean(data.running);
+    tester.draining = Boolean(data.draining);
     tester.startedAt = data.startedAt ?? null;
     tester.currentRunId = data.currentRunId ?? null;
     tester.logTail = data.logTail ?? '';
@@ -115,7 +186,7 @@
       applySimulatorStatus(data);
       setTimeout(refreshSimulator, 800);
     } catch (error) {
-      tester.error = error.message;
+      tester.error = error instanceof Error ? error.message : String(error);
     } finally {
       tester.busy = false;
     }
@@ -154,7 +225,7 @@
         <span class="eyebrow">experiment controls</span>
         <span class="status mono" class:on={tester.running}>
           <span class="pip" class:live={tester.running}></span>
-          {tester.running ? `RUNNING ${durationLabel(runAge)}` : 'IDLE'}
+          {tester.running ? `RUNNING ${durationLabel(runAge)}` : tester.draining ? 'DRAINING' : 'IDLE'}
         </span>
       </div>
 
@@ -167,7 +238,7 @@
             min="1"
             max="5000"
             step="1"
-            disabled={tester.running || tester.busy}
+            disabled={tester.running || tester.draining || tester.busy}
             bind:value={tester.options.nodes}
           />
         </label>
@@ -179,7 +250,7 @@
             min="1"
             max="3600"
             step="0.5"
-            disabled={tester.running || tester.busy}
+            disabled={tester.running || tester.draining || tester.busy}
             bind:value={tester.options.interval}
           />
         </label>
@@ -191,13 +262,13 @@
             min="0"
             max="86400"
             step="1"
-            disabled={tester.running || tester.busy}
+            disabled={tester.running || tester.draining || tester.busy}
             bind:value={tester.options.duration}
           />
         </label>
         <label>
           <span class="eyebrow">qos</span>
-          <select class="mono" disabled={tester.running || tester.busy} bind:value={tester.options.qos}>
+          <select class="mono" disabled={tester.running || tester.draining || tester.busy} bind:value={tester.options.qos}>
             <option value={0}>0</option>
             <option value={1}>1</option>
             <option value={2}>2</option>
@@ -211,7 +282,7 @@
             min="1"
             max="200"
             step="1"
-            disabled={!tester.options.shared || tester.running || tester.busy}
+            disabled={!tester.options.shared || tester.running || tester.draining || tester.busy}
             bind:value={tester.options.connections}
           />
         </label>
@@ -223,20 +294,20 @@
             min="0"
             max="1"
             step="0.01"
-            disabled={tester.running || tester.busy}
+            disabled={tester.running || tester.draining || tester.busy}
             bind:value={tester.options.duplicateRate}
           />
         </label>
         <label class="toggle-row">
           <span class="eyebrow">shared</span>
-          <input type="checkbox" disabled={tester.running || tester.busy} bind:checked={tester.options.shared} />
+          <input type="checkbox" disabled={tester.running || tester.draining || tester.busy} bind:checked={tester.options.shared} />
         </label>
       </form>
 
       <div class="actions">
-        <button class="action" class:on={tester.running} type="button" disabled={tester.busy} onclick={toggleSimulator}>
+        <button class="action" class:on={tester.running} type="button" disabled={tester.busy || tester.draining} onclick={toggleSimulator}>
           <span class="pip" class:live={tester.running}></span>
-          {tester.busy ? 'WORKING' : tester.running ? 'STOP TEST' : 'START TEST'}
+          {tester.busy ? 'WORKING' : tester.draining ? 'DRAINING' : tester.running ? 'STOP TEST' : 'START TEST'}
         </button>
         <button class="secondary" type="button" disabled={tester.busy} onclick={refreshSimulator}>REFRESH</button>
       </div>

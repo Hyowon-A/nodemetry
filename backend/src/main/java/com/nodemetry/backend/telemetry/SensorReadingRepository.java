@@ -9,8 +9,6 @@ import java.util.Optional;
 
 public interface SensorReadingRepository extends JpaRepository<SensorReading, Long> {
 
-    boolean existsByMessageId(String messageId);
-
     Optional<SensorReading> findTopByNodeIdOrderByReceivedAtDesc(String nodeId);
 
     List<SensorReading> findTop100ByNodeIdOrderByReceivedAtDesc(String nodeId);

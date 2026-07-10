@@ -1,6 +1,7 @@
 package com.nodemetry.backend.mqtt;
 
 import com.nodemetry.backend.node.NodeService;
+import com.nodemetry.backend.run.RunRegistry;
 import com.nodemetry.backend.telemetry.TelemetryService;
 import com.nodemetry.backend.telemetry.TelemetryMessage;
 import org.junit.jupiter.api.Test;
@@ -9,11 +10,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -27,6 +28,9 @@ class MqttMessageHandlerTest {
 
     @Mock
     private NodeService nodeService;
+
+    @Mock
+    private RunRegistry runRegistry;
 
     @InjectMocks
     private MqttMessageHandler handler;
@@ -64,6 +68,36 @@ class MqttMessageHandlerTest {
         assertThat(message.rssi()).isEqualTo(-62.0);
         assertThat(message.firmwareVersion()).isEqualTo("firmware-1.0.0");
         assertThat(message.light()).isEqualTo(4200.0);
+
+        verify(runRegistry).recordSaved("20260706T132045Z");
+        verify(runRegistry, never()).recordDupe(any());
+    }
+
+    @Test
+    void handleTelemetryRecordsDuplicateWhenSaveViolatesUniqueConstraint() {
+        String payload = """
+                {
+                  "messageId": "message-001",
+                  "nodeId": "test-node-001",
+                  "runId": "20260706T132045Z",
+                  "temperature": 23.5,
+                  "humidity": 48.2,
+                  "co2": 615.0,
+                  "battery": 87.0,
+                  "rssi": -62.0,
+                  "firmwareVersion": "firmware-1.0.0",
+                  "light": 4200.0
+                }
+                """;
+        doThrow(new DataIntegrityViolationException("duplicate key"))
+                .when(telemetryService)
+                .processTelemetry(any());
+
+        assertThatCode(() -> handler.handleTelemetry("nodemetry/node-001/telemetry", payload))
+                .doesNotThrowAnyException();
+
+        verify(runRegistry).recordDupe("20260706T132045Z");
+        verify(runRegistry, never()).recordSaved(any());
     }
 
     @Test
@@ -100,6 +134,8 @@ class MqttMessageHandlerTest {
                 .doesNotThrowAnyException();
 
         verify(telemetryService).processTelemetry(any());
+        verify(runRegistry, never()).recordSaved(any());
+        verify(runRegistry, never()).recordDupe(any());
     }
 
     @Test

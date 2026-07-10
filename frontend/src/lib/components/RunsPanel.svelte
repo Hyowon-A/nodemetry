@@ -14,8 +14,7 @@
 
   function fmtDuration(ms) {
     if (ms == null) return '—';
-    if (ms < 60000) return `${(ms / 1000).toFixed(0)}s`;
-    return `${(ms / 60000).toFixed(1)}m`;
+    return `${(ms / 1000).toFixed(0)}s`;
   }
 
   const maxThroughput = $derived(
@@ -43,7 +42,9 @@
             <th>qos</th>
             <th>nodes</th>
             <th>duration</th>
+            <th>queued</th>
             <th>saved</th>
+            <th>dupes</th>
             <th>throughput</th>
             <th>dupe %</th>
           </tr>
@@ -55,7 +56,9 @@
               <td class="mono center">{run.qos}</td>
               <td class="mono center">{run.nodeCount}</td>
               <td class="mono dim">{fmtDuration(run.durationMs)}</td>
+              <td class="mono">{(run.totalReceived ?? 0).toLocaleString()}</td>
               <td class="mono">{run.totalSaved.toLocaleString()}</td>
+              <td class="mono">{(run.duplicatesSkipped ?? 0).toLocaleString()}</td>
               <td
                 class="mono"
                 class:best={run.throughputMsgPerSec != null &&
