@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import TopBar from '$lib/components/TopBar.svelte';
   import RunsPanel from '$lib/components/RunsPanel.svelte';
+  import VNodeTopology from '$lib/components/VNodeTopology.svelte';
   import { store } from '$lib/telemetry.svelte.js';
   import { num, timeAgo } from '$lib/format.js';
 
@@ -109,9 +110,7 @@
 
   /** @param {number} ms */
   function durationLabel(ms) {
-    if (!ms) return '0s';
-    if (ms < 60000) return `${Math.floor(ms / 1000)}s`;
-    return `${(ms / 60000).toFixed(1)}m`;
+    return `${Math.floor((ms || 0) / 1000)}s`;
   }
 
   const virtualNodes = /** @type {VNode[]} */ ($derived(store.nodes.filter(isVirtualNode).sort(compareNodeIds)));
@@ -340,59 +339,13 @@
     </section>
   </div>
 
-  <section class="panel">
-    <div class="head">
-      <span class="eyebrow">virtual nodes</span>
-      <span class="hint mono">{onlineVirtualNodes} online / {virtualNodes.length} total</span>
-    </div>
-
-    {#if virtualNodes.length === 0}
-      <p class="empty mono">No vnode-* nodes are present.</p>
-    {:else}
-      <div class="scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>node</th>
-              <th>status</th>
-              <th>last seen</th>
-              <th>rssi</th>
-              <th>battery</th>
-              <th>temp</th>
-              <th>humidity</th>
-              <th>co2</th>
-              <th>light</th>
-              <th>firmware</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each virtualNodes as node (node.nodeId)}
-              <tr class:offline={node.status !== 'online'}>
-                <td>
-                  <div class="node-name">{node.name}</div>
-                  <div class="node-id mono">{node.nodeId}</div>
-                </td>
-                <td>
-                  <span class="status mono" class:on={node.status === 'online'}>
-                    <span class="pip" class:live={node.status === 'online'}></span>
-                    {node.status}
-                  </span>
-                </td>
-                <td class="mono dim">{timeAgo(node.lastSeenAt, store.now)}</td>
-                <td class="mono">{node.rssi ?? 'none'}</td>
-                <td class="mono">{node.battery == null ? 'none' : `${num(node.battery, 0)}%`}</td>
-                <td class="mono">{num(node.latest?.temperature, 1)}</td>
-                <td class="mono">{node.latest?.humidity == null ? 'none' : `${num(node.latest.humidity, 0)}%`}</td>
-                <td class="mono">{node.latest?.co2 == null ? 'none' : Math.round(node.latest.co2)}</td>
-                <td class="mono">{node.latest?.light == null ? 'none' : Math.round(node.latest.light)}</td>
-                <td class="mono dim">{node.firmwareVersion}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    {/if}
-  </section>
+  <VNodeTopology
+    nodes={virtualNodes}
+    now={store.now}
+    running={tester.running}
+    expectedRate={expectedRate}
+    observedRate={observedRate}
+  />
 
   <div class="panel-bare"><RunsPanel /></div>
 </main>
@@ -599,53 +552,6 @@
     font-size: 11px;
     line-height: 1.5;
     white-space: pre-wrap;
-  }
-  .empty {
-    margin: 0;
-    color: var(--text-faint);
-    font-size: 12px;
-  }
-  .scroll {
-    overflow-x: auto;
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-  th {
-    padding: 0 12px 10px;
-    border-bottom: 1px solid var(--line);
-    color: var(--text-faint);
-    font-family: var(--mono);
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-align: left;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
-  td {
-    padding: 12px;
-    border-bottom: 1px solid var(--line-soft);
-    color: var(--text-dim);
-    vertical-align: middle;
-    white-space: nowrap;
-  }
-  tr.offline {
-    opacity: 0.58;
-  }
-  .node-name {
-    color: var(--text);
-    font-weight: 500;
-  }
-  .node-id {
-    margin-top: 1px;
-    color: var(--text-faint);
-    font-size: 11px;
-  }
-  .dim {
-    color: var(--text-faint);
   }
   @keyframes blink {
     0%,
