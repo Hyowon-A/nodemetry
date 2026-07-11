@@ -187,7 +187,7 @@ def run_node_dedicated(node, args):
     client.will_set(status_topic, payload=status_payload("offline"), qos=1, retain=True)
 
     try:
-        client.connect(args.broker, args.port, keepalive=max(30, args.interval * 2))
+        client.connect(args.broker, args.port, keepalive=int(max(30, args.interval * 2)))
     except Exception as exc:  # noqa: BLE001
         print(f"[{node.node_id}] connect failed: {exc}", file=sys.stderr)
         return
