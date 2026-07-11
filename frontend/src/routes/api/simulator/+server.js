@@ -80,13 +80,13 @@ function waitForExit(child, timeoutMs) {
 
 function parseSimulatorStats(log) {
   let stats = null;
-  const finalPattern = /Done\. total_queued=(\d+) duplicates_queued=(\d+) failures=(\d+)/g;
-  const livePattern = /queued=(\d+) duplicate_queued=(\d+) failures=(\d+)/g;
+  const finalPattern = /Done\. total_(?:received|queued)=(\d+) duplicates_(?:received|queued)=(\d+) failures=(\d+)/g;
+  const livePattern = /(?:received|queued)=(\d+) duplicate_(?:received|queued)=(\d+) failures=(\d+)/g;
 
   for (const match of log.matchAll(finalPattern)) {
     stats = {
-      queued: Number(match[1]),
-      duplicateQueued: Number(match[2]),
+      received: Number(match[1]),
+      duplicateReceived: Number(match[2]),
       failures: Number(match[3])
     };
   }
@@ -95,8 +95,8 @@ function parseSimulatorStats(log) {
 
   for (const match of log.matchAll(livePattern)) {
     stats = {
-      queued: Number(match[1]),
-      duplicateQueued: Number(match[2]),
+      received: Number(match[1]),
+      duplicateReceived: Number(match[2]),
       failures: Number(match[3])
     };
   }
@@ -108,7 +108,7 @@ function endRunPayload() {
   const stats = parseSimulatorStats(logTail);
   return {
     endedAtEpochMs: lastExit?.at ?? Date.now(),
-    ...(stats ? { totalReceived: stats.queued } : {})
+    ...(stats ? { totalReceived: stats.received } : {})
   };
 }
 
