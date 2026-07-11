@@ -1,4 +1,5 @@
-import { json } from '@sveltejs/kit';
+import { json, error } from '@sveltejs/kit';
+import { dev } from '$app/environment';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -139,6 +140,7 @@ async function endCurrentRun() {
 }
 
 export function GET() {
+  if (!dev) throw error(404, 'Not found');
   return json(status());
 }
 
@@ -190,6 +192,7 @@ function argsForOptions(options, runId) {
 }
 
 export async function POST({ request }) {
+  if (!dev) throw error(404, 'Not found');
   if (isRunning() || endingRunId) return json(status());
 
   if (!existsSync(scriptPath)) {
@@ -270,6 +273,7 @@ export async function POST({ request }) {
 }
 
 export async function DELETE() {
+  if (!dev) throw error(404, 'Not found');
   if (!isRunning()) {
     await endCurrentRun();
     return json(status());
