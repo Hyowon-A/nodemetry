@@ -2,8 +2,8 @@ package com.nodemetry.backend.mqtt;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nodemetry.backend.node.NodeService;
+import com.nodemetry.backend.telemetry.TelemetryBatchIngestService;
 import com.nodemetry.backend.telemetry.TelemetryMessage;
-import com.nodemetry.backend.telemetry.TelemetryService;
 import org.springframework.stereotype.Service;
 
 import java.util.Locale;
@@ -14,11 +14,14 @@ public class MqttMessageHandler {
     private record StatusMessage(String status) {}
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final TelemetryService telemetryService;
+    private final TelemetryBatchIngestService batchIngestService;
     private final NodeService nodeService;
 
-    public MqttMessageHandler(TelemetryService telemetryService, NodeService nodeService) {
-        this.telemetryService = telemetryService;
+    public MqttMessageHandler(
+            TelemetryBatchIngestService batchIngestService,
+            NodeService nodeService
+    ) {
+        this.batchIngestService = batchIngestService;
         this.nodeService = nodeService;
     }
 
@@ -32,23 +35,21 @@ public class MqttMessageHandler {
             return;
         }
 
+        TelemetryMessage message;
         try {
-            TelemetryMessage message = objectMapper.readValue(payload, TelemetryMessage.class);
-
-            System.out.println("=== Telemetry Received ===");
-            System.out.println("Topic: " + topic);
-            System.out.println("Node ID: " + message.nodeId());
-            System.out.println("Message ID: " + message.messageId());
-
-            telemetryService.processTelemetry(message);
-
-            System.out.println("==========================");
-
+            message = objectMapper.readValue(payload, TelemetryMessage.class);
         } catch (Exception e) {
-            System.err.println("Failed to process telemetry message");
+            System.err.println("Failed to parse telemetry message");
             System.err.println("Topic: " + topic);
             System.err.println("Payload: " + payload);
             System.err.println("Error: " + e.getMessage());
+            return;
+        }
+
+        if (!batchIngestService.enqueue(message)) {
+            System.err.println("Telemetry ingest queue full; dropped message");
+            System.err.println("Topic: " + topic);
+            System.err.println("Payload: " + payload);
         }
     }
 

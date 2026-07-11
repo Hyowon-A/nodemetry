@@ -46,13 +46,13 @@ import paho.mqtt.client as mqtt
 load_dotenv()
 
 # ----------------------------------------------------------------------------
-# Shared, thread-safe counters so we can print real throughput at the end.
+# Shared, thread-safe counters for publish calls accepted by the MQTT client.
 # ----------------------------------------------------------------------------
 class Stats:
     def __init__(self):
         self._lock = threading.Lock()
-        self.published = 0
-        self.duplicates = 0
+        self.queued = 0
+        self.duplicate_queued = 0
         self.publish_failures = 0
 
     def inc(self, field_name, n=1):
@@ -61,7 +61,7 @@ class Stats:
 
     def snapshot(self):
         with self._lock:
-            return self.published, self.duplicates, self.publish_failures
+            return self.queued, self.duplicate_queued, self.publish_failures
 
 
 STATS = Stats()
@@ -122,6 +122,10 @@ def topic(prefix, node_id, suffix):
     return f"{prefix}/{node_id}/{suffix}"
 
 
+def status_payload(status):
+    return json.dumps({"status": status})
+
+
 INTERNET_TIME_URL = "https://www.google.com/generate_204"
 
 
@@ -180,15 +184,15 @@ def run_node_dedicated(node, args):
     client = make_client(f"sim-{node.node_id}", args)
     status_topic = topic(args.prefix, node.node_id, "status")
     # Last Will: broker publishes this if the connection drops uncleanly.
-    client.will_set(status_topic, payload="offline", qos=1, retain=True)
+    client.will_set(status_topic, payload=status_payload("offline"), qos=1, retain=True)
 
     try:
-        client.connect(args.broker, args.port, keepalive=max(30, args.interval * 2))
+        client.connect(args.broker, args.port, keepalive=int(max(30, args.interval * 2)))
     except Exception as exc:  # noqa: BLE001
         print(f"[{node.node_id}] connect failed: {exc}", file=sys.stderr)
         return
     client.loop_start()
-    client.publish(status_topic, "online", qos=1, retain=True)
+    client.publish(status_topic, status_payload("online"), qos=1, retain=True)
 
     tele_topic = topic(args.prefix, node.node_id, "telemetry")
     # Spread first publishes across the interval so they don't all fire at once.
@@ -200,7 +204,7 @@ def run_node_dedicated(node, args):
         STOP.wait(args.interval + random.uniform(-0.5, 0.5))
 
     # Clean shutdown: explicit offline (so it isn't only the Last Will path).
-    client.publish(status_topic, "offline", qos=1, retain=True)
+    client.publish(status_topic, status_payload("offline"), qos=1, retain=True)
     time.sleep(0.2)
     client.loop_stop()
     client.disconnect()
@@ -220,14 +224,25 @@ def run_shared_connection(conn_index, nodes, args):
     client.loop_start()
 
     for n in nodes:
-        client.publish(topic(args.prefix, n.node_id, "status"), "online", qos=1, retain=True)
+        client.publish(topic(args.prefix, n.node_id, "status"), status_payload("online"), qos=1, retain=True)
 
-    offsets = {n.node_id: random.uniform(0, args.interval) for n in nodes}
-    time.sleep(min(offsets.values()) if offsets else 0)
+    # Give each node a stable phase offset evenly spread across the interval so
+    # this shared connection paces its publishes across the window instead of
+    # bursting them all at the top of every cycle (which spikes the broker and
+    # backend and defeats the point of a steady load test).
+    count = len(nodes)
+    offsets = [i * args.interval / count for i in range(count)] if count else []
+
+    # Desynchronise connections so their cycles don't all start in lockstep.
+    STOP.wait(random.uniform(0, args.interval))
 
     while not STOP.is_set():
         cycle_start = time.time()
-        for n in nodes:
+        for offset, n in zip(offsets, nodes):
+            if STOP.is_set():
+                break
+            # Hold this node's publish until its slot within the current cycle.
+            STOP.wait(max(0.0, (cycle_start + offset) - time.time()))
             if STOP.is_set():
                 break
             _publish_once(client, n, topic(args.prefix, n.node_id, "telemetry"), args)
@@ -235,7 +250,7 @@ def run_shared_connection(conn_index, nodes, args):
         STOP.wait(max(0.0, args.interval - elapsed))
 
     for n in nodes:
-        client.publish(topic(args.prefix, n.node_id, "status"), "offline", qos=1, retain=True)
+        client.publish(topic(args.prefix, n.node_id, "status"), status_payload("offline"), qos=1, retain=True)
     time.sleep(0.2)
     client.loop_stop()
     client.disconnect()
@@ -247,9 +262,9 @@ def _publish_once(client, node, tele_topic, args):
     payload = node.next_payload(reuse_last_id=reuse)
     info = client.publish(tele_topic, json.dumps(payload), qos=args.qos)
     if info.rc == mqtt.MQTT_ERR_SUCCESS:
-        STATS.inc("published")
+        STATS.inc("queued")
         if reuse:
-            STATS.inc("duplicates")
+            STATS.inc("duplicate_queued")
     else:
         STATS.inc("publish_failures")
 
@@ -295,7 +310,7 @@ def parse_args():
     p.add_argument("--username", default=os.environ.get("MQTT_USERNAME"))
     p.add_argument("--password", default=os.environ.get("MQTT_PASSWORD"))
     p.add_argument("--prefix", default="nodemetry", help="topic root, e.g. nodemetry/{nodeId}/telemetry")
-    p.add_argument("--node-prefix", default="node", help="virtual node id prefix")
+    p.add_argument("--node-prefix", default="vnode", help="virtual node id prefix")
     p.add_argument(
         "--run-id",
         help=(
@@ -352,11 +367,11 @@ def main():
             time.sleep(1)
             if args.duration and (time.time() - start) >= args.duration:
                 STOP.set()
-            pub, dup, fail = STATS.snapshot()
+            queued, dup, fail = STATS.snapshot()
             elapsed = max(1e-6, time.time() - start)
             print(
-                f"\r  published={pub} duplicates={dup} failures={fail} "
-                f"rate={pub / elapsed:.1f} msg/s   ",
+                f"\r  queued={queued} duplicate_queued={dup} failures={fail} "
+                f"queued_rate={queued / elapsed:.1f} msg/s   ",
                 end="",
                 flush=True,
             )
@@ -364,11 +379,11 @@ def main():
         STOP.set()
         for t in threads:
             t.join(timeout=5)
-        pub, dup, fail = STATS.snapshot()
+        queued, dup, fail = STATS.snapshot()
         elapsed = max(1e-6, time.time() - start)
         print(
-            f"\nDone. total_published={pub} duplicates_sent={dup} "
-            f"failures={fail} avg_rate={pub / elapsed:.1f} msg/s over {elapsed:.0f}s"
+            f"\nDone. total_queued={queued} duplicates_queued={dup} "
+            f"failures={fail} avg_queued_rate={queued / elapsed:.1f} msg/s over {elapsed:.0f}s"
         )
 
 

@@ -2,7 +2,6 @@ package com.nodemetry.backend.telemetry;
 
 import com.nodemetry.backend.node.SensorNode;
 import com.nodemetry.backend.node.SensorNodeRepository;
-import com.nodemetry.backend.run.RunRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -12,6 +11,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.util.Optional;
@@ -19,7 +19,6 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -36,16 +35,12 @@ class TelemetryServiceTest {
     @Mock
     private SimpMessagingTemplate messagingTemplate;
 
-    @Mock
-    private RunRegistry runRegistry;
-
     @InjectMocks
     private TelemetryService service;
 
     @Test
     void processTelemetryCreatesNodeAndReadingWhenNodeDoesNotExist() {
         TelemetryMessage message = validMessage();
-        when(readingRepository.existsByMessageId(message.messageId())).thenReturn(false);
         when(nodeRepository.findByNodeId(message.nodeId())).thenReturn(Optional.empty());
 
         service.processTelemetry(message);
@@ -77,9 +72,6 @@ class TelemetryServiceTest {
         assertThat(savedReading.getFirmwareVersion()).isEqualTo(message.firmwareVersion());
         assertThat(savedReading.getMeasuredAt()).isNotNull();
         assertThat(savedReading.getReceivedAt()).isNotNull();
-        verify(runRegistry).recordReceived(message.runId());
-        verify(runRegistry).recordSaved(message.runId());
-        verify(runRegistry, never()).recordDupe();
     }
 
     @Test
@@ -88,7 +80,6 @@ class TelemetryServiceTest {
         SensorNode existingNode = new SensorNode(message.nodeId());
         existingNode.updateHealth(10.0, -90.0, "old-firmware");
 
-        when(readingRepository.existsByMessageId(message.messageId())).thenReturn(false);
         when(nodeRepository.findByNodeId(message.nodeId())).thenReturn(Optional.of(existingNode));
 
         service.processTelemetry(message);
@@ -102,24 +93,20 @@ class TelemetryServiceTest {
         ArgumentCaptor<SensorReading> readingCaptor = ArgumentCaptor.forClass(SensorReading.class);
         verify(readingRepository).save(readingCaptor.capture());
         assertThat(readingCaptor.getValue().getMessageId()).isEqualTo(message.messageId());
-        verify(runRegistry).recordReceived(message.runId());
-        verify(runRegistry).recordSaved(message.runId());
-        verify(runRegistry, never()).recordDupe();
     }
 
     @Test
-    void processTelemetrySkipsDuplicateMessage() {
+    void processTelemetryPropagatesDuplicateMessageIdViolation() {
+        // Dedup is enforced by the unique constraint on messageId: a redelivered
+        // message makes save() throw, which the caller turns into a dupe record.
         TelemetryMessage message = validMessage();
-        when(readingRepository.existsByMessageId(message.messageId())).thenReturn(true);
+        when(nodeRepository.findByNodeId(message.nodeId())).thenReturn(Optional.empty());
+        when(readingRepository.save(any())).thenThrow(new DataIntegrityViolationException("duplicate key"));
 
-        service.processTelemetry(message);
+        assertThatThrownBy(() -> service.processTelemetry(message))
+                .isInstanceOf(DataIntegrityViolationException.class);
 
-        verify(readingRepository).existsByMessageId(message.messageId());
-        verify(readingRepository, never()).save(any());
-        verifyNoInteractions(nodeRepository);
-        verify(runRegistry).recordReceived(message.runId());
-        verify(runRegistry).recordDupe(message.runId());
-        verify(runRegistry, never()).recordSaved();
+        verifyNoInteractions(messagingTemplate);
     }
 
     @Test
@@ -127,7 +114,6 @@ class TelemetryServiceTest {
         TelemetryMessage message = new TelemetryMessage(
                 "message-002", "node-001", "run-001", 23.5, 48.2, 615.0, 87.0, -62.0, "firmware-1.0.0", null
         );
-        when(readingRepository.existsByMessageId(message.messageId())).thenReturn(false);
         when(nodeRepository.findByNodeId(message.nodeId())).thenReturn(Optional.empty());
 
         service.processTelemetry(message);
@@ -151,7 +137,7 @@ class TelemetryServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("messageId is required");
 
-        verifyNoInteractions(readingRepository, nodeRepository, runRegistry);
+        verifyNoInteractions(readingRepository, nodeRepository);
     }
 
     @ParameterizedTest
@@ -168,7 +154,7 @@ class TelemetryServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("nodeId is required");
 
-        verifyNoInteractions(readingRepository, nodeRepository, runRegistry);
+        verifyNoInteractions(readingRepository, nodeRepository);
     }
 
     @ParameterizedTest
@@ -192,7 +178,7 @@ class TelemetryServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("runId is required");
 
-        verifyNoInteractions(readingRepository, nodeRepository, runRegistry);
+        verifyNoInteractions(readingRepository, nodeRepository);
     }
 
     @ParameterizedTest
@@ -209,7 +195,7 @@ class TelemetryServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("firmwareVersion is required");
 
-        verifyNoInteractions(readingRepository, nodeRepository, runRegistry);
+        verifyNoInteractions(readingRepository, nodeRepository);
     }
 
     private TelemetryMessage validMessage() {

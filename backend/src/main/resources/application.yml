@@ -8,8 +8,8 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 3
-      minimum-idle: 1
+      maximum-pool-size: 10
+      minimum-idle: 2
       connection-timeout: 30000
       idle-timeout: 30000
       max-lifetime: 600000
@@ -17,7 +17,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
         format_sql: true
@@ -31,6 +31,12 @@ mqtt:
   client-id: ${MQTT_CLIENT_ID:nodemetry-backend-local}
   telemetry-topic: nodemetry/+/telemetry
   status-topic: nodemetry/+/status
+
+telemetry:
+  ingest:
+    queue-capacity: ${TELEMETRY_INGEST_QUEUE_CAPACITY:50000}
+    batch-size: ${TELEMETRY_INGEST_BATCH_SIZE:500}
+    flush-interval-ms: ${TELEMETRY_INGEST_FLUSH_INTERVAL_MS:100}
 
 app:
   frontend:

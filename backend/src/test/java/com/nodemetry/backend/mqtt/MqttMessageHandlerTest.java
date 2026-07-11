@@ -1,7 +1,7 @@
 package com.nodemetry.backend.mqtt;
 
 import com.nodemetry.backend.node.NodeService;
-import com.nodemetry.backend.telemetry.TelemetryService;
+import com.nodemetry.backend.telemetry.TelemetryBatchIngestService;
 import com.nodemetry.backend.telemetry.TelemetryMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,17 +13,17 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class MqttMessageHandlerTest {
 
     @Mock
-    private TelemetryService telemetryService;
+    private TelemetryBatchIngestService batchIngestService;
 
     @Mock
     private NodeService nodeService;
@@ -32,7 +32,7 @@ class MqttMessageHandlerTest {
     private MqttMessageHandler handler;
 
     @Test
-    void handleTelemetryParsesPayloadAndProcessesTelemetry() {
+    void handleTelemetryParsesPayloadAndEnqueuesTelemetry() {
         String payload = """
                 {
                   "messageId": "message-001",
@@ -47,11 +47,12 @@ class MqttMessageHandlerTest {
                   "light": 4200.0
                 }
                 """;
+        when(batchIngestService.enqueue(any())).thenReturn(true);
 
         handler.handleTelemetry("nodemetry/node-001/telemetry", payload);
 
         ArgumentCaptor<TelemetryMessage> messageCaptor = ArgumentCaptor.forClass(TelemetryMessage.class);
-        verify(telemetryService).processTelemetry(messageCaptor.capture());
+        verify(batchIngestService).enqueue(messageCaptor.capture());
         TelemetryMessage message = messageCaptor.getValue();
 
         assertThat(message.messageId()).isEqualTo("message-001");
@@ -67,17 +68,7 @@ class MqttMessageHandlerTest {
     }
 
     @Test
-    void handleTelemetryDoesNotThrowOrProcessWhenPayloadIsInvalidJson() {
-        String payload = "{not-json";
-
-        assertThatCode(() -> handler.handleTelemetry("nodemetry/node-001/telemetry", payload))
-                .doesNotThrowAnyException();
-
-        verify(telemetryService, never()).processTelemetry(any());
-    }
-
-    @Test
-    void handleTelemetryDoesNotPropagateServiceExceptions() {
+    void handleTelemetryDoesNotThrowWhenQueueIsFull() {
         String payload = """
                 {
                   "messageId": "message-001",
@@ -92,14 +83,22 @@ class MqttMessageHandlerTest {
                   "light": 4200.0
                 }
                 """;
-        doThrow(new IllegalArgumentException("messageId is required"))
-                .when(telemetryService)
-                .processTelemetry(any());
+        when(batchIngestService.enqueue(any())).thenReturn(false);
 
         assertThatCode(() -> handler.handleTelemetry("nodemetry/node-001/telemetry", payload))
                 .doesNotThrowAnyException();
 
-        verify(telemetryService).processTelemetry(any());
+        verify(batchIngestService).enqueue(any());
+    }
+
+    @Test
+    void handleTelemetryDoesNotThrowOrEnqueueWhenPayloadIsInvalidJson() {
+        String payload = "{not-json";
+
+        assertThatCode(() -> handler.handleTelemetry("nodemetry/node-001/telemetry", payload))
+                .doesNotThrowAnyException();
+
+        verify(batchIngestService, never()).enqueue(any());
     }
 
     @Test
@@ -118,11 +117,12 @@ class MqttMessageHandlerTest {
                   "light": null
                 }
                 """;
+        when(batchIngestService.enqueue(any())).thenReturn(true);
 
         handler.handleTelemetry("nodemetry/node-001/telemetry", payload);
 
         ArgumentCaptor<TelemetryMessage> messageCaptor = ArgumentCaptor.forClass(TelemetryMessage.class);
-        verify(telemetryService).processTelemetry(messageCaptor.capture());
+        verify(batchIngestService).enqueue(messageCaptor.capture());
         assertThat(messageCaptor.getValue().light()).isNull();
     }
 
@@ -145,14 +145,14 @@ class MqttMessageHandlerTest {
 
         handler.handleTelemetry("nodemetry/node-001/telemetry", payload, true);
 
-        verifyNoInteractions(telemetryService);
+        verifyNoInteractions(batchIngestService);
     }
 
     @Test
     void handleStatusDoesNotProcessTelemetry() {
         handler.handleStatus("nodemetry/node-001/status", "{\"status\":\"online\"}");
 
-        verifyNoInteractions(telemetryService);
+        verifyNoInteractions(batchIngestService);
     }
 
     @Test
