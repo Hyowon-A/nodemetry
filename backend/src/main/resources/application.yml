@@ -32,6 +32,12 @@ mqtt:
   telemetry-topic: nodemetry/+/telemetry
   status-topic: nodemetry/+/status
 
+telemetry:
+  ingest:
+    queue-capacity: ${TELEMETRY_INGEST_QUEUE_CAPACITY:50000}
+    batch-size: ${TELEMETRY_INGEST_BATCH_SIZE:500}
+    flush-interval-ms: ${TELEMETRY_INGEST_FLUSH_INTERVAL_MS:100}
+
 app:
   frontend:
     allowed-origins: ${FRONTEND_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}

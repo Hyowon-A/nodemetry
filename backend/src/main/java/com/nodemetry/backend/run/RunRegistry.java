@@ -87,9 +87,13 @@ public class RunRegistry {
     }
 
     public synchronized void recordSaved(String runId) {
+        recordSaved(runId, 1);
+    }
+
+    public synchronized void recordSaved(String runId, long count) {
         RunCounters c = runId == null ? null : counters.get(runId);
-        if (c != null && !c.ended) {
-            c.saved.increment();
+        if (c != null && !c.ended && count > 0) {
+            c.saved.add(count);
         }
     }
 
@@ -98,9 +102,13 @@ public class RunRegistry {
     }
 
     public synchronized void recordDupe(String runId) {
+        recordDupe(runId, 1);
+    }
+
+    public synchronized void recordDupe(String runId, long count) {
         RunCounters c = runId == null ? null : counters.get(runId);
-        if (c != null && !c.ended) {
-            c.dupes.increment();
+        if (c != null && !c.ended && count > 0) {
+            c.dupes.add(count);
         }
     }
 

@@ -2,10 +2,8 @@ package com.nodemetry.backend.mqtt;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nodemetry.backend.node.NodeService;
-import com.nodemetry.backend.run.RunRegistry;
+import com.nodemetry.backend.telemetry.TelemetryBatchIngestService;
 import com.nodemetry.backend.telemetry.TelemetryMessage;
-import com.nodemetry.backend.telemetry.TelemetryService;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import java.util.Locale;
@@ -16,18 +14,15 @@ public class MqttMessageHandler {
     private record StatusMessage(String status) {}
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final TelemetryService telemetryService;
+    private final TelemetryBatchIngestService batchIngestService;
     private final NodeService nodeService;
-    private final RunRegistry runRegistry;
 
     public MqttMessageHandler(
-            TelemetryService telemetryService,
-            NodeService nodeService,
-            RunRegistry runRegistry
+            TelemetryBatchIngestService batchIngestService,
+            NodeService nodeService
     ) {
-        this.telemetryService = telemetryService;
+        this.batchIngestService = batchIngestService;
         this.nodeService = nodeService;
-        this.runRegistry = runRegistry;
     }
 
     public void handleTelemetry(String topic, String payload) {
@@ -51,18 +46,10 @@ public class MqttMessageHandler {
             return;
         }
 
-        try {
-            telemetryService.processTelemetry(message);
-            runRegistry.recordSaved(message.runId());
-        } catch (DataIntegrityViolationException dup) {
-            // Redelivered messageId hit the unique constraint — an expected QoS 1
-            // duplicate, not an error. Keep it off the error/console path.
-            runRegistry.recordDupe(message.runId());
-        } catch (Exception e) {
-            System.err.println("Failed to process telemetry message");
+        if (!batchIngestService.enqueue(message)) {
+            System.err.println("Telemetry ingest queue full; dropped message");
             System.err.println("Topic: " + topic);
             System.err.println("Payload: " + payload);
-            System.err.println("Error: " + e.getMessage());
         }
     }
 
