@@ -67,8 +67,8 @@ MovingAverageFilter temperatureFilter;
 MovingAverageFilter humidityFilter;
 
 // ---------- Wi-Fi ----------
-const char* WIFI_SSID = "VM0900341";
-const char* WIFI_PASSWORD = "qn3vgKzqwpkx";
+const char* WIFI_SSID = "YOUR_WIFI";
+const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
 
 // ---------- MQTT ----------
 const char* MQTT_HOST =
@@ -76,8 +76,8 @@ const char* MQTT_HOST =
 
 const int MQTT_PORT = 8883;
 
-const char* MQTT_USERNAME = "nodemetryAdmin";
-const char* MQTT_PASSWORD = "Admin0987";
+const char* MQTT_USERNAME = "MQTT_USERNAME";
+const char* MQTT_PASSWORD = "MQTT_PASSWORD";
 
 // ---------- Node details ----------
 String nodeId = "node-001";
