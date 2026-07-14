@@ -269,9 +269,9 @@ function seedNodes() {
 const rnd = (a, b) => Math.random() * (b - a) + a;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-function pushPoint(arr, v) {
+function pushPoint(arr, v, limit = WINDOW) {
   arr.push(v);
-  if (arr.length > WINDOW) arr.shift();
+  if (limit !== null && arr.length > limit) arr.shift();
 }
 
 /* ----------------------- ingestion pipeline ----------------------- */
@@ -366,19 +366,22 @@ export function applyReading(r) {
 
   const selectedRunId = selectedRunIdForNode(node.nodeId);
   if (!selectedRunId || r.runId === selectedRunId) {
-    pushPoint(node.history.t, t);
-    pushPoint(node.history.temperature, node.latest.temperature);
+    const historyLimit = selectedRunId ? null : WINDOW;
+    pushPoint(node.history.t, t, historyLimit);
+    pushPoint(node.history.temperature, node.latest.temperature, historyLimit);
     pushPoint(
       node.history.temperatureRaw,
       r.temperatureRaw ?? node.latest.temperature,
+      historyLimit,
     );
-    pushPoint(node.history.humidity, node.latest.humidity);
-    pushPoint(node.history.humidityRaw, r.humidityRaw ?? node.latest.humidity);
+    pushPoint(node.history.humidity, node.latest.humidity, historyLimit);
+    pushPoint(node.history.humidityRaw, r.humidityRaw ?? node.latest.humidity, historyLimit);
     pushPoint(
       node.history.lightRaw,
       r.lightRaw ?? r.light ?? node.latest.light,
+      historyLimit,
     );
-    pushPoint(node.history.light, node.latest.light);
+    pushPoint(node.history.light, node.latest.light, historyLimit);
   }
   ensureNodeIngestion(node).messagesSaved++;
   recountNodes();

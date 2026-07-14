@@ -89,14 +89,13 @@ function historyFromRows(rows) {
 
 export async function loadNodeHistory(nodeId, runId = null) {
   const rows = await getJSON(readingsPath(nodeId, runId));
-  const recent = rows
-    .sort((a, b) => readingTime(a) - readingTime(b))
-    .slice(-config.WINDOW);
+  const sortedRows = rows.sort((a, b) => readingTime(a) - readingTime(b));
+  const historyRows = runId ? sortedRows : sortedRows.slice(-config.WINDOW);
 
   if (selectedRunIdForNode(nodeId) !== (runId ?? null)) return 0;
 
-  replaceNodeHistory(nodeId, historyFromRows(recent));
-  return recent.length;
+  replaceNodeHistory(nodeId, historyFromRows(historyRows));
+  return historyRows.length;
 }
 
 async function seedHistory(node) {
