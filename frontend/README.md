@@ -29,6 +29,8 @@ REST and WebSocket endpoints in `.env`:
 ```
 PUBLIC_API_BASE=http://localhost:8080
 PUBLIC_WS_URL=ws://localhost:8080/ws
+# Optional dev-only load-test node visibility:
+# PUBLIC_INCLUDE_VNODES=true
 ```
 
 > `PUBLIC_`-prefixed variables are bundled into the browser build — keep secrets
@@ -36,8 +38,10 @@ PUBLIC_WS_URL=ws://localhost:8080/ws
 
 The live integration lives in **`src/lib/live.svelte.js`**:
 
-1. **REST bootstrap** — `GET /api/v1/nodes`, then `GET /api/v1/nodes/{id}/readings`
-   to seed history for each node.
+1. **REST bootstrap** — `GET /api/v1/nodes`, filtering out `vnode-*` records by
+   default, then `GET /api/v1/nodes/{id}/readings` for the selected dashboard
+   node. Set `PUBLIC_INCLUDE_VNODES=true` in development to include load-test
+   virtual nodes in the live store.
 2. **Live stream** — STOMP over a raw WebSocket via `@stomp/stompjs` (the backend
    speaks STOMP without SockJS), subscribing to `/topic/readings` and
    `/topic/nodes/status`.

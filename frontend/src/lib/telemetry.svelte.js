@@ -135,6 +135,7 @@ export function setNodes(nodes) {
   store.nodes = nodes;
   store.selectedNodeId =
     nodes.find((node) => node.nodeId === store.selectedNodeId)?.nodeId ??
+    nodes.find((node) => !isVirtualNodeId(node.nodeId))?.nodeId ??
     nodes[0]?.nodeId ??
     null;
   recountNodes();
