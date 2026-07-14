@@ -7,7 +7,8 @@
     now = Date.now(),
     running = false,
     expectedRate = 0,
-    observedRate = 0
+    observedRate = 0,
+    showTarget = true
   } = $props();
 
   const TAU = Math.PI * 2;
@@ -528,10 +529,12 @@
         <b>{num(observedRate, 1)}</b>
         <small>msg/s</small>
       </span>
-      <span>
-        <b>{num(expectedRate, 1)}</b>
-        <small>target</small>
-      </span>
+      {#if showTarget}
+        <span>
+          <b>{num(expectedRate, 1)}</b>
+          <small>target</small>
+        </span>
+      {/if}
     </div>
   </div>
 

@@ -29,6 +29,8 @@ REST and WebSocket endpoints in `.env`:
 ```
 PUBLIC_API_BASE=http://localhost:8080
 PUBLIC_WS_URL=ws://localhost:8080/ws
+# Optional dev-only load-test node visibility:
+# PUBLIC_INCLUDE_VNODES=true
 ```
 
 > `PUBLIC_`-prefixed variables are bundled into the browser build — keep secrets
@@ -36,8 +38,10 @@ PUBLIC_WS_URL=ws://localhost:8080/ws
 
 The live integration lives in **`src/lib/live.svelte.js`**:
 
-1. **REST bootstrap** — `GET /api/v1/nodes`, then `GET /api/v1/nodes/{id}/readings`
-   to seed history for each node.
+1. **REST bootstrap** — `GET /api/v1/nodes`, filtering out `vnode-*` records by
+   default, then `GET /api/v1/nodes/{id}/readings` for the selected dashboard
+   node. Set `PUBLIC_INCLUDE_VNODES=true` in development to include load-test
+   virtual nodes in the live store.
 2. **Live stream** — STOMP over a raw WebSocket via `@stomp/stompjs` (the backend
    speaks STOMP without SockJS), subscribing to `/topic/readings` and
    `/topic/nodes/status`.
@@ -56,8 +60,8 @@ temperature, humidity, co2, light, battery, rssi, firmwareVersion
 
 ## What's on screen
 
-- **Top bar** — broker subscription, backend connection state, node uptime, and
-  clock. (The LOAD TESTER link appears in dev only.)
+- **Top bar** — broker subscription, backend connection state, node uptime,
+  clock, and a link to the load tester view.
 - **Overview strip** — active nodes versus total nodes.
 - **Charts** — temperature, humidity, CO₂, and raw light for the selected node,
   with raw-vs-filtered traces for temperature and humidity.
@@ -71,18 +75,18 @@ temperature, humidity, co2, light, battery, rssi, firmwareVersion
 - **Node details / run selector** — per-node history, with a selector to scope the
   charts to a specific load-test run.
 
-## Load tester (development only)
+## Load tester
 
-`/load-tester` drives the Python simulator in `../simulator` through the server
-route `src/routes/api/simulator/+server.js` to generate load against the backend
-and record test runs (start/stop, node count, interval, QoS, duplicate rate, plus
-a virtual-node topology view).
+`/load-tester` shows the virtual-node topology and run history. The page is
+available in production as a read-only view.
 
-**It is available only in development.** The page and the `/api/simulator`
-endpoint return **404** in any production build — both are gated on SvelteKit's
-`dev` flag (`$app/environment`), so nothing shippable can spawn simulator
-processes. Verify with `npm run build && npm run preview`: the link is gone and
-`/load-tester` + `/api/simulator` return 404.
+In development, the page also shows an experiment control panel that drives the
+Python simulator in `../simulator` through
+`src/routes/api/simulator/+server.js` to generate load against the backend and
+record test runs (start/stop, node count, interval, QoS, duplicate rate). The
+control panel is hidden in production, and `/api/simulator` still returns
+**404** in any production build so nothing shippable can spawn simulator
+processes.
 
 ## Project layout
 
@@ -110,8 +114,7 @@ src/
     ├── +layout.svelte          starts the backend connection
     ├── +page.svelte            dashboard composition
     ├── load-tester/
-    │   ├── +page.svelte        load-tester UI (dev only)
-    │   └── +page.js            404s the page in production
+    │   └── +page.svelte        read-only prod view + dev simulator controls
     └── api/
         └── simulator/
             └── +server.js      spawns/stops the simulator (dev only)

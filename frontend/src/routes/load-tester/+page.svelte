@@ -1,4 +1,5 @@
 <script>
+  import { dev } from '$app/environment';
   import { onMount } from 'svelte';
   import TopBar from '$lib/components/TopBar.svelte';
   import RunsPanel from '$lib/components/RunsPanel.svelte';
@@ -140,7 +141,7 @@
     { label: 'last vnode seen', value: lastVirtualSeenAt ? timeAgo(lastVirtualSeenAt, store.now) : 'none' },
     { label: 'avg rssi', value: avgVirtualRssi == null ? 'none' : `${num(avgVirtualRssi, 0)} dBm` },
     { label: 'avg battery', value: avgVirtualBattery == null ? 'none' : `${num(avgVirtualBattery, 0)}%` },
-    { label: 'target rate', value: `${num(expectedRate, 1)} msg/s`, accent: tester.running },
+    ...(dev ? [{ label: 'target rate', value: `${num(expectedRate, 1)} msg/s`, accent: tester.running }] : []),
     { label: 'observed rate', value: `${num(observedRate, 1)} msg/s`, accent: observedRate > 0 }
   ]);
 
@@ -192,6 +193,7 @@
   }
 
   onMount(() => {
+    if (!dev) return;
     refreshSimulator();
     const timer = setInterval(refreshSimulator, 3000);
     return () => clearInterval(timer);
@@ -212,120 +214,122 @@
       <p class="mono">
         {virtualNodes.length.toLocaleString()} vnode-* node{virtualNodes.length === 1 ? '' : 's'} tracked
         <span class="sep">/</span>
-        run {runIdLabel(tester.currentRunId)}
+        {dev ? `run ${runIdLabel(tester.currentRunId)}` : 'read-only view'}
       </p>
     </div>
     <a class="return-link mono" href="/">DASHBOARD</a>
   </section>
 
-  <div class="tester-grid">
-    <section class="panel controls-panel">
-      <div class="head">
-        <span class="eyebrow">experiment controls</span>
-        <span class="status mono" class:on={tester.running}>
-          <span class="pip" class:live={tester.running}></span>
-          {tester.running ? `RUNNING ${durationLabel(runAge)}` : tester.draining ? 'DRAINING' : 'IDLE'}
-        </span>
-      </div>
+  <div class="tester-grid" class:viewer-only={!dev}>
+    {#if dev}
+      <section class="panel controls-panel">
+        <div class="head">
+          <span class="eyebrow">experiment controls</span>
+          <span class="status mono" class:on={tester.running}>
+            <span class="pip" class:live={tester.running}></span>
+            {tester.running ? `RUNNING ${durationLabel(runAge)}` : tester.draining ? 'DRAINING' : 'IDLE'}
+          </span>
+        </div>
 
-      <form class="control-grid" onsubmit={(event) => event.preventDefault()}>
-        <label>
-          <span class="eyebrow">nodes</span>
-          <input
-            class="mono"
-            type="number"
-            min="1"
-            max="5000"
-            step="1"
-            disabled={tester.running || tester.draining || tester.busy}
-            bind:value={tester.options.nodes}
-          />
-        </label>
-        <label>
-          <span class="eyebrow">interval sec</span>
-          <input
-            class="mono"
-            type="number"
-            min="1"
-            max="3600"
-            step="0.5"
-            disabled={tester.running || tester.draining || tester.busy}
-            bind:value={tester.options.interval}
-          />
-        </label>
-        <label>
-          <span class="eyebrow">duration sec</span>
-          <input
-            class="mono"
-            type="number"
-            min="0"
-            max="86400"
-            step="1"
-            disabled={tester.running || tester.draining || tester.busy}
-            bind:value={tester.options.duration}
-          />
-        </label>
-        <label>
-          <span class="eyebrow">qos</span>
-          <select class="mono" disabled={tester.running || tester.draining || tester.busy} bind:value={tester.options.qos}>
-            <option value={0}>0</option>
-            <option value={1}>1</option>
-            <option value={2}>2</option>
-          </select>
-        </label>
-        <label>
-          <span class="eyebrow">connections</span>
-          <input
-            class="mono"
-            type="number"
-            min="1"
-            max="200"
-            step="1"
-            disabled={!tester.options.shared || tester.running || tester.draining || tester.busy}
-            bind:value={tester.options.connections}
-          />
-        </label>
-        <label>
-          <span class="eyebrow">duplicate rate</span>
-          <input
-            class="mono"
-            type="number"
-            min="0"
-            max="1"
-            step="0.01"
-            disabled={tester.running || tester.draining || tester.busy}
-            bind:value={tester.options.duplicateRate}
-          />
-        </label>
-        <label class="toggle-row">
-          <span class="eyebrow">shared</span>
-          <input type="checkbox" disabled={tester.running || tester.draining || tester.busy} bind:checked={tester.options.shared} />
-        </label>
-      </form>
+        <form class="control-grid" onsubmit={(event) => event.preventDefault()}>
+          <label>
+            <span class="eyebrow">nodes</span>
+            <input
+              class="mono"
+              type="number"
+              min="1"
+              max="5000"
+              step="1"
+              disabled={tester.running || tester.draining || tester.busy}
+              bind:value={tester.options.nodes}
+            />
+          </label>
+          <label>
+            <span class="eyebrow">interval sec</span>
+            <input
+              class="mono"
+              type="number"
+              min="1"
+              max="3600"
+              step="0.5"
+              disabled={tester.running || tester.draining || tester.busy}
+              bind:value={tester.options.interval}
+            />
+          </label>
+          <label>
+            <span class="eyebrow">duration sec</span>
+            <input
+              class="mono"
+              type="number"
+              min="0"
+              max="86400"
+              step="1"
+              disabled={tester.running || tester.draining || tester.busy}
+              bind:value={tester.options.duration}
+            />
+          </label>
+          <label>
+            <span class="eyebrow">qos</span>
+            <select class="mono" disabled={tester.running || tester.draining || tester.busy} bind:value={tester.options.qos}>
+              <option value={0}>0</option>
+              <option value={1}>1</option>
+              <option value={2}>2</option>
+            </select>
+          </label>
+          <label>
+            <span class="eyebrow">connections</span>
+            <input
+              class="mono"
+              type="number"
+              min="1"
+              max="200"
+              step="1"
+              disabled={!tester.options.shared || tester.running || tester.draining || tester.busy}
+              bind:value={tester.options.connections}
+            />
+          </label>
+          <label>
+            <span class="eyebrow">duplicate rate</span>
+            <input
+              class="mono"
+              type="number"
+              min="0"
+              max="1"
+              step="0.01"
+              disabled={tester.running || tester.draining || tester.busy}
+              bind:value={tester.options.duplicateRate}
+            />
+          </label>
+          <label class="toggle-row">
+            <span class="eyebrow">shared</span>
+            <input type="checkbox" disabled={tester.running || tester.draining || tester.busy} bind:checked={tester.options.shared} />
+          </label>
+        </form>
 
-      <div class="actions">
-        <button class="action" class:on={tester.running} type="button" disabled={tester.busy || tester.draining} onclick={toggleSimulator}>
-          <span class="pip" class:live={tester.running}></span>
-          {tester.busy ? 'WORKING' : tester.draining ? 'DRAINING' : tester.running ? 'STOP TEST' : 'START TEST'}
-        </button>
-        <button class="secondary" type="button" disabled={tester.busy} onclick={refreshSimulator}>REFRESH</button>
-      </div>
+        <div class="actions">
+          <button class="action" class:on={tester.running} type="button" disabled={tester.busy || tester.draining} onclick={toggleSimulator}>
+            <span class="pip" class:live={tester.running}></span>
+            {tester.busy ? 'WORKING' : tester.draining ? 'DRAINING' : tester.running ? 'STOP TEST' : 'START TEST'}
+          </button>
+          <button class="secondary" type="button" disabled={tester.busy} onclick={refreshSimulator}>REFRESH</button>
+        </div>
 
-      {#if tester.error}
-        <p class="error mono">{tester.error}</p>
-      {/if}
-      {#if tester.lastExit && !tester.error}
-        <p class="exit mono">last exit: code {tester.lastExit.code ?? 'none'} / signal {tester.lastExit.signal ?? 'none'}</p>
-      {/if}
-      {#if tester.logTail}
-        <pre class="log mono">{tester.logTail}</pre>
-      {/if}
-    </section>
+        {#if tester.error}
+          <p class="error mono">{tester.error}</p>
+        {/if}
+        {#if tester.lastExit && !tester.error}
+          <p class="exit mono">last exit: code {tester.lastExit.code ?? 'none'} / signal {tester.lastExit.signal ?? 'none'}</p>
+        {/if}
+        {#if tester.logTail}
+          <pre class="log mono">{tester.logTail}</pre>
+        {/if}
+      </section>
+    {/if}
 
     <section class="panel summary-panel">
       <div class="head">
         <span class="eyebrow">experiment snapshot</span>
-        <span class="hint mono">duplicate target {pct(tester.options.duplicateRate)}</span>
+        <span class="hint mono">{dev ? `duplicate target ${pct(tester.options.duplicateRate)}` : 'read only'}</span>
       </div>
 
       <div class="cards">
@@ -345,6 +349,7 @@
     running={tester.running}
     expectedRate={expectedRate}
     observedRate={observedRate}
+    showTarget={dev}
   />
 
   <div class="panel-bare"><RunsPanel /></div>
@@ -415,6 +420,9 @@
     grid-template-columns: minmax(360px, 0.9fr) minmax(0, 1.3fr);
     gap: var(--gap);
     align-items: start;
+  }
+  .tester-grid.viewer-only {
+    grid-template-columns: minmax(0, 1fr);
   }
   .panel {
     padding: 16px;

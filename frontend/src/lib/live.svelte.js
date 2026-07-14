@@ -32,11 +32,14 @@ import {
   emptyHistory,
   emptyLatest,
   replaceNodeHistory,
+  isVirtualNodeId,
+  selectedDashboardNode,
   selectedRunIdForNode
 } from '$lib/telemetry.svelte.js';
 
 const API = (env.PUBLIC_API_BASE || 'http://localhost:8080').replace(/\/$/, '');
 const WS_URL = env.PUBLIC_WS_URL || API.replace(/^http/, 'ws') + '/ws';
+const INCLUDE_VNODES = env.PUBLIC_INCLUDE_VNODES === 'true';
 
 /** Normalise a timestamp (ISO string or epoch) to epoch ms. */
 const ms = (t) => (typeof t === 'number' ? t : t ? Date.parse(t) : Date.now());
@@ -56,7 +59,7 @@ function mapNode(n) {
     status: n.status ?? 'offline',
     battery: n.battery ?? null,
     rssi: n.rssi ?? null,
-    lastSeenAt: ms(n.lastSeenAt),
+    lastSeenAt: n.lastSeenAt ? ms(n.lastSeenAt) : null,
     latest: emptyLatest(),
     history: emptyHistory()
   };
@@ -140,17 +143,24 @@ export async function connectLive() {
     store.now = Date.now();
   }, 1000);
 
-  // 1) initial state over REST
+  let initialDashboardNode = null;
+
+  // 1) initial node summaries over REST
   try {
-    const nodes = (await getJSON('/api/v1/nodes')).map(mapNode);
+    const nodes = (await getJSON('/api/v1/nodes'))
+      .filter((node) => INCLUDE_VNODES || !isVirtualNodeId(node.nodeId))
+      .map(mapNode);
     setNodes(nodes);
-    await Promise.all(nodes.map(seedHistory));
+    initialDashboardNode = selectedDashboardNode();
   } catch (e) {
     console.error('[nodemetry] REST bootstrap failed — is PUBLIC_API_BASE correct?', e.message);
   }
 
   // 2) live stream — STOMP over WebSocket
   openStomp();
+
+  // 3) seed only the visible dashboard history; do not block STOMP on every node.
+  if (initialDashboardNode) void seedHistory(initialDashboardNode);
 }
 
 function openStomp() {
@@ -169,6 +179,7 @@ function openStomp() {
             runId: r.runId,
             nodeId: r.nodeId,
             measuredAt: ms(r.measuredAt ?? r.receivedAt),
+            receivedAt: ms(r.receivedAt ?? r.measuredAt),
             temperatureRaw: r.temperatureRaw,
             temperatureFiltered: r.temperatureFiltered,
             humidityRaw: r.humidityRaw,
