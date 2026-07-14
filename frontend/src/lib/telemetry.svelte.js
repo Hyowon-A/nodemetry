@@ -316,7 +316,8 @@ function noteNodeAlert(nodeId) {
 export function applyReading(r) {
   if (!r?.nodeId) return;
 
-  const t = r.measuredAt ?? Date.now();
+  const receivedAt = r.receivedAt ?? r.measuredAt ?? Date.now();
+  const measuredAt = r.measuredAt ?? receivedAt;
   let node = store.nodes.find((n) => n.nodeId === r.nodeId);
 
   // A node may start publishing after the initial REST bootstrap. Add it to
@@ -330,7 +331,7 @@ export function applyReading(r) {
       status: "online",
       battery: r.battery ?? null,
       rssi: r.rssi ?? null,
-      lastSeenAt: t,
+      lastSeenAt: receivedAt,
       latest: emptyLatest(),
       history: emptyHistory(),
       ingestion: emptyIngestionMetrics(),
@@ -340,7 +341,7 @@ export function applyReading(r) {
   }
 
   store.metrics.messagesReceived++;
-  noteNodeMessage(node, t);
+  noteNodeMessage(node, receivedAt);
 
   // duplicate handling via messageId (idempotent writes)
   if (r.messageId && seenMessageIds.has(r.messageId)) {
@@ -350,7 +351,7 @@ export function applyReading(r) {
   }
   if (r.messageId) seenMessageIds.add(r.messageId);
 
-  node.lastSeenAt = t;
+  node.lastSeenAt = receivedAt;
   if (node.status !== "online") node.status = "online";
   if (r.battery !== undefined && r.battery !== null) node.battery = r.battery;
   if (r.rssi !== undefined && r.rssi !== null) node.rssi = r.rssi;
@@ -367,7 +368,7 @@ export function applyReading(r) {
   const selectedRunId = selectedRunIdForNode(node.nodeId);
   if (!selectedRunId || r.runId === selectedRunId) {
     const historyLimit = selectedRunId ? null : WINDOW;
-    pushPoint(node.history.t, t, historyLimit);
+    pushPoint(node.history.t, measuredAt, historyLimit);
     pushPoint(node.history.temperature, node.latest.temperature, historyLimit);
     pushPoint(
       node.history.temperatureRaw,
