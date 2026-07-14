@@ -76,30 +76,39 @@ STOP = threading.Event()
 class VirtualNode:
     node_id: str
     run_id: str
-    firmware: str = "1.0.0-sim"
-    has_co2: bool = False
-    has_light: bool = False
+    firmware: str = "firmware-1.0.0"
     seq: int = 0
-    temperature: float = field(default_factory=lambda: random.uniform(19, 26))
-    humidity: float = field(default_factory=lambda: random.uniform(40, 60))
-    co2: float = field(default_factory=lambda: random.uniform(450, 700))
+    temperature_raw: float = field(default_factory=lambda: random.uniform(19, 26))
+    temperature_filtered: float = 0.0
+    humidity_raw: float = field(default_factory=lambda: random.uniform(40, 60))
+    humidity_filtered: float = 0.0
     battery: float = field(default_factory=lambda: random.uniform(60, 100))
-    rssi: int = field(default_factory=lambda: random.randint(-80, -50))
+    rssi: float = field(default_factory=lambda: random.uniform(-80, -50))
     light: float = field(default_factory=lambda: random.uniform(100, 10000))
+
+    def __post_init__(self):
+        # Filtered readings start pinned to the raw value, then lag it via EMA.
+        self.temperature_filtered = self.temperature_raw
+        self.humidity_filtered = self.humidity_raw
 
     def _walk(self, value, step, lo, hi):
         value += random.uniform(-step, step)
         return max(lo, min(hi, value))
 
+    def _filter(self, filtered, raw, alpha=0.3):
+        # Exponential moving average: a smoothed reading that trails the raw one.
+        return filtered + alpha * (raw - filtered)
+
     def next_payload(self, reuse_last_id=False):
         """Build the next telemetry payload, advancing the random walk."""
         if not reuse_last_id:
             self.seq += 1
-        self.temperature = self._walk(self.temperature, 0.3, -10, 50)
-        self.humidity = self._walk(self.humidity, 0.8, 0, 100)
-        self.co2 = self._walk(self.co2, 15, 400, 2000)
+        self.temperature_raw = self._walk(self.temperature_raw, 0.3, -10, 50)
+        self.temperature_filtered = self._filter(self.temperature_filtered, self.temperature_raw)
+        self.humidity_raw = self._walk(self.humidity_raw, 0.8, 0, 100)
+        self.humidity_filtered = self._filter(self.humidity_filtered, self.humidity_raw)
         self.battery = max(0.0, self.battery - random.uniform(0, 0.02))
-        self.rssi = int(self._walk(self.rssi, 2, -95, -40))
+        self.rssi = self._walk(self.rssi, 2, -95, -40)
         self.light = self._walk(self.light, 500, 0, 100000)
 
         message_id = f"{self.seq:06d}"
@@ -108,13 +117,14 @@ class VirtualNode:
             "messageId": f"{self.node_id}-{self.run_id}-{message_id}",
             "nodeId": self.node_id,
             "runId": self.run_id,
-            "temperature": round(self.temperature, 2),
-            "humidity": round(self.humidity, 2),
-            "co2": round(self.co2, 1) if self.has_co2 else None,
+            "temperatureRaw": round(self.temperature_raw, 2),
+            "temperatureFiltered": round(self.temperature_filtered, 2),
+            "humidityRaw": round(self.humidity_raw, 2),
+            "humidityFiltered": round(self.humidity_filtered, 2),
             "battery": round(self.battery, 1),
-            "rssi": self.rssi,
+            "light": round(self.light, 1),
+            "rssi": round(self.rssi, 1),
             "firmwareVersion": self.firmware,
-            "light": round(self.light, 1) if self.has_light else None,
         }
 
 
@@ -276,8 +286,6 @@ def build_nodes(args):
             VirtualNode(
                 node_id=f"{args.node_prefix}-{i:04d}",
                 run_id=args.run_id,
-                has_co2=(i % 3 == 0),     # ~1/3 of nodes report CO2
-                has_light=(i % 5 == 0),  # ~1/5 of nodes report light
             )
         )
     return nodes
@@ -310,7 +318,16 @@ def parse_args():
     p.add_argument("--username", default=os.environ.get("MQTT_USERNAME"))
     p.add_argument("--password", default=os.environ.get("MQTT_PASSWORD"))
     p.add_argument("--prefix", default="nodemetry", help="topic root, e.g. nodemetry/{nodeId}/telemetry")
-    p.add_argument("--node-prefix", default="vnode", help="virtual node id prefix")
+    p.add_argument(
+        "--node-prefix",
+        default=None,
+        help="virtual node id prefix (default: vnode, or test-node with --test)",
+    )
+    p.add_argument(
+        "--test",
+        action="store_true",
+        help="use the 'test-node' id prefix to keep test traffic separate from vnode load testing",
+    )
     p.add_argument(
         "--run-id",
         help=(
@@ -323,6 +340,8 @@ def parse_args():
     p.add_argument("--shared", action="store_true", help="multiplex nodes over a few connections (for capped brokers)")
     p.add_argument("--connections", type=int, default=5, help="connections to use in --shared mode")
     args = p.parse_args()
+    if args.node_prefix is None:
+        args.node_prefix = "test-node" if args.test else "vnode"
     if args.run_id is None:
         args.run_id = default_run_id()
     return args
@@ -335,7 +354,7 @@ def main():
     expected_rate = args.nodes / args.interval if args.interval else 0
     mode = f"shared/{args.connections} conns" if args.shared else "one conn per node"
     print(
-        f"Starting {args.nodes} virtual nodes ({mode}), QoS {args.qos}, "
+        f"Starting {args.nodes} {args.node_prefix} nodes ({mode}), QoS {args.qos}, "
         f"interval {args.interval}s -> ~{expected_rate:.1f} msg/s expected, "
         f"run_id={args.run_id}",
         flush=True,
