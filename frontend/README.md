@@ -4,8 +4,8 @@ The SvelteKit dashboard for the **Nodemetry** MQTT telemetry platform. It
 connects to the Spring Boot backend, bootstraps the fleet + recent history over
 REST, and streams live readings over STOMP. It presents the fleet as an
 instrument console: each sensor metric is its own oscilloscope channel, with
-live readouts, a node status table, time-series charts, a raw-vs-filtered
-(signal/noise) trace, threshold alerts, and ingestion metrics.
+live readouts, a node status table, time-series charts, raw-vs-filtered
+temperature/humidity traces, threshold alerts, and ingestion metrics.
 
 ## Run it
 
@@ -56,12 +56,11 @@ temperature, humidity, co2, light, battery, rssi, firmwareVersion
 
 ## What's on screen
 
-- **Top bar** — broker subscription, live/paused state (the LIVE button pauses the
-  feed), node uptime, and clock. (The LOAD TESTER link appears in dev only.)
+- **Top bar** — broker subscription, backend connection state, node uptime, and
+  clock. (The LOAD TESTER link appears in dev only.)
 - **Overview strip** — active nodes versus total nodes.
-- **Charts** — temperature, humidity, CO₂, and light for the selected node, plus
-  the signature **raw vs filtered** trace (faint jittery raw overlaid with the
-  clean filtered signal).
+- **Charts** — temperature, humidity, CO₂, and raw light for the selected node,
+  with raw-vs-filtered traces for temperature and humidity.
 - **Alerts** — threshold and offline alerts (CO₂ > 1000 ppm, temp > 28 °C,
   humidity < 35 %, battery < 20 %, RSSI < −75 dBm, light < 50 lux, node offline)
   with an acknowledge action.

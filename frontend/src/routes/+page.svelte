@@ -79,10 +79,9 @@
 
           <div class="panel wide comparison" style:--stagger="5" style:--chart-color="var(--ch-light)">
             <div class="sig-head">
-              <span class="eyebrow">raw vs filtered · light</span>
+              <span class="eyebrow">raw · light</span>
               <div class="legend mono">
                 <span><i class="sw raw"></i>raw</span>
-                <span><i class="sw filt"></i>filtered</span>
               </div>
             </div>
             <SignalChart
@@ -93,8 +92,7 @@
               decimals={2}
               timestamps={h.t}
               series={[
-                { name: 'raw', points: h.lightRaw, color: 'var(--ch-light)', faint: true, width: 1.4 },
-                { name: 'filtered', points: h.light, color: 'var(--ch-light)', area: true, glow: true, width: 2.4 }
+                { name: 'raw', points: h.light, color: 'var(--ch-light)', area: true, glow: true, width: 2.4 }
               ]}
             />
           </div>

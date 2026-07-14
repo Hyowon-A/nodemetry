@@ -83,7 +83,7 @@ function historyFromRows(rows) {
     h.humidityRaw.push(r.humidityRaw ?? r.humidity ?? null);
     h.co2.push(r.co2 ?? null);
     h.lightRaw.push(r.lightRaw ?? r.light ?? null);
-    h.light.push(r.lightFiltered ?? r.light ?? null);
+    h.light.push(r.lightRaw ?? r.light ?? null);
   }
   return h;
 }
@@ -177,7 +177,6 @@ function openStomp() {
             humidity: r.humidity,
             co2: r.co2,
             lightRaw: r.lightRaw ?? r.light,
-            lightFiltered: r.lightFiltered,
             light: r.light,
             battery: r.battery,
             rssi: r.rssi,

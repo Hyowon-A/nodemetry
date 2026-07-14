@@ -302,7 +302,7 @@ export function applyReading(r) {
     temperature: r.temperatureFiltered ?? r.temperature ?? node.latest.temperature,
     humidity: r.humidityFiltered ?? r.humidity ?? node.latest.humidity,
     co2: r.co2 ?? node.latest.co2,
-    light: r.lightFiltered ?? r.light ?? node.latest.light
+    light: r.lightRaw ?? r.light ?? node.latest.light
   };
 
   const selectedRunId = selectedRunIdForNode(node.nodeId);
@@ -424,8 +424,7 @@ function makeReading(node) {
     rssi: Math.round(clamp(node.rssi + rnd(-3, 3), -92, -45)),
     firmwareVersion: node.firmwareVersion,
     lightRaw: b.l != null ? +clamp(b.l + lNoise, 0, 100000).toFixed(2) : null,
-    lightFiltered: b.l != null ? +b.l.toFixed(2) : null,
-    light: b.l != null ? +b.l.toFixed(2) : null
+    light: b.l != null ? +clamp(b.l + lNoise, 0, 100000).toFixed(2) : null
   };
 }
 
@@ -497,22 +496,6 @@ export function stopFeed() {
   tickHandle = null;
   clockHandle = null;
   store.connected = false;
-}
-
-/** Pause / resume button in the top bar. */
-export function toggleFeed() {
-  if (tickHandle) stopFeed();
-  else {
-    store.connected = true;
-    store.startedAt = store.startedAt || Date.now();
-    tickHandle = setInterval(() => {
-      sweepOffline();
-      tick();
-    }, TICK_MS);
-    clockHandle = setInterval(() => {
-      store.now = Date.now();
-    }, 1000);
-  }
 }
 
 export const config = { WINDOW, TICK_MS, RULES };
