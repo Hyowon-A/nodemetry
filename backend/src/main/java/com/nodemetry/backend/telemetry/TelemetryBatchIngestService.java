@@ -166,26 +166,28 @@ public class TelemetryBatchIngestService {
     private int[] insertReadings(List<QueuedReading> readings) {
         int[][] counts = jdbcTemplate.batchUpdate("""
                 insert into sensor_readings (
-                    message_id, node_id, run_id, temperature, humidity, co2,
-                    battery, rssi, firmware_version, light, measured_at, received_at
+                    message_id, node_id, run_id, temperature_raw, temperature_filtered,
+                    humidity_raw, humidity_filtered, battery, light, rssi, firmware_version,
+                    measured_at, received_at
                 )
-                select ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                select ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 where not exists (select 1 from sensor_readings where message_id = ?)
                 """, readings, readings.size(), (ps, reading) -> {
             TelemetryMessage message = reading.message();
             ps.setString(1, message.messageId());
             ps.setString(2, message.nodeId());
             ps.setString(3, message.runId());
-            ps.setObject(4, message.temperature());
-            ps.setObject(5, message.humidity());
-            ps.setObject(6, message.co2());
-            ps.setObject(7, message.battery());
-            ps.setObject(8, message.rssi());
-            ps.setString(9, message.firmwareVersion());
-            ps.setObject(10, message.light());
-            ps.setTimestamp(11, Timestamp.from(reading.measuredAt()));
-            ps.setTimestamp(12, Timestamp.from(reading.receivedAt()));
-            ps.setString(13, message.messageId());
+            ps.setObject(4, message.temperatureRaw());
+            ps.setObject(5, message.temperatureFiltered());
+            ps.setObject(6, message.humidityRaw());
+            ps.setObject(7, message.humidityFiltered());
+            ps.setObject(8, message.battery());
+            ps.setObject(9, message.light());
+            ps.setObject(10, message.rssi());
+            ps.setString(11, message.firmwareVersion());
+            ps.setTimestamp(12, Timestamp.from(reading.measuredAt()));
+            ps.setTimestamp(13, Timestamp.from(reading.receivedAt()));
+            ps.setString(14, message.messageId());
         });
         return Arrays.stream(counts).flatMapToInt(Arrays::stream).toArray();
     }
@@ -255,13 +257,14 @@ public class TelemetryBatchIngestService {
                     message.messageId(),
                     message.nodeId(),
                     message.runId(),
-                    message.temperature(),
-                    message.humidity(),
-                    message.co2(),
+                    message.temperatureRaw(),
+                    message.temperatureFiltered(),
+                    message.humidityRaw(),
+                    message.humidityFiltered(),
                     message.battery(),
+                    message.light(),
                     message.rssi(),
                     message.firmwareVersion(),
-                    message.light(),
                     measuredAt,
                     receivedAt
             );

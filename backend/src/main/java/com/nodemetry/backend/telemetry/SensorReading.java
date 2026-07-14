@@ -27,9 +27,10 @@ public class SensorReading {
     @Column(name = "run_id")
     private String runId;
 
-    private Double temperature;
-    private Double humidity;
-    private Double co2;
+    private Double temperatureRaw;
+    private Double temperatureFiltered;
+    private Double humidityRaw;
+    private Double humidityFiltered;
     private Double battery;
     private Double rssi;
     private Double light;
@@ -49,24 +50,26 @@ public class SensorReading {
             String messageId,
             String nodeId,
             String runId,
-            Double temperature,
-            Double humidity,
-            Double co2,
+            Double temperatureRaw,
+            Double temperatureFiltered,
+            Double humidityRaw,
+            Double humidityFiltered,
             Double battery,
+            Double light,
             Double rssi,
-            String firmwareVersion,
-            Double light
+            String firmwareVersion
     ) {
         this.messageId = messageId;
         this.nodeId = nodeId;
         this.runId = runId;
-        this.temperature = temperature;
-        this.humidity = humidity;
-        this.co2 = co2;
+        this.temperatureRaw = temperatureRaw;
+        this.temperatureFiltered = temperatureFiltered;
+        this.humidityRaw = humidityRaw;
+        this.humidityFiltered = humidityFiltered;
         this.battery = battery;
+        this.light = light;
         this.rssi = rssi;
         this.firmwareVersion = firmwareVersion;
-        this.light = light;
         this.measuredAt = Instant.now();
         this.receivedAt = Instant.now();
     }
@@ -87,16 +90,20 @@ public class SensorReading {
         return runId;
     }
 
-    public Double getTemperature() {
-        return temperature;
+    public Double getTemperatureRaw() {
+        return temperatureRaw;
     }
 
-    public Double getHumidity() {
-        return humidity;
+    public Double getTemperatureFiltered() {
+        return temperatureFiltered;
     }
 
-    public Double getCo2() {
-        return co2;
+    public Double getHumidityRaw() {
+        return humidityRaw;
+    }
+
+    public Double getHumidityFiltered() {
+        return humidityFiltered;
     }
 
     public Double getBattery() {

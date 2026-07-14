@@ -38,13 +38,14 @@ class MqttMessageHandlerTest {
                   "messageId": "message-001",
                   "nodeId": "test-node-001",
                   "runId": "20260706T132045Z",
-                  "temperature": 23.5,
-                  "humidity": 48.2,
-                  "co2": 615.0,
+                  "temperatureRaw": 23.5,
+                  "temperatureFiltered": 23.5,
+                  "humidityRaw": 48.2,
+                  "humidityFiltered": 48.2,
                   "battery": 87.0,
+                  "light": 4200.0,
                   "rssi": -62.0,
-                  "firmwareVersion": "firmware-1.0.0",
-                  "light": 4200.0
+                  "firmwareVersion": "firmware-1.0.0"
                 }
                 """;
         when(batchIngestService.enqueue(any())).thenReturn(true);
@@ -58,13 +59,14 @@ class MqttMessageHandlerTest {
         assertThat(message.messageId()).isEqualTo("message-001");
         assertThat(message.nodeId()).isEqualTo("test-node-001");
         assertThat(message.runId()).isEqualTo("20260706T132045Z");
-        assertThat(message.temperature()).isEqualTo(23.5);
-        assertThat(message.humidity()).isEqualTo(48.2);
-        assertThat(message.co2()).isEqualTo(615.0);
+        assertThat(message.temperatureRaw()).isEqualTo(23.5);
+        assertThat(message.temperatureFiltered()).isEqualTo(23.5);
+        assertThat(message.humidityRaw()).isEqualTo(48.2);
+        assertThat(message.humidityFiltered()).isEqualTo(48.2);
         assertThat(message.battery()).isEqualTo(87.0);
+        assertThat(message.light()).isEqualTo(4200.0);
         assertThat(message.rssi()).isEqualTo(-62.0);
         assertThat(message.firmwareVersion()).isEqualTo("firmware-1.0.0");
-        assertThat(message.light()).isEqualTo(4200.0);
     }
 
     @Test
@@ -74,13 +76,14 @@ class MqttMessageHandlerTest {
                   "messageId": "message-001",
                   "nodeId": "test-node-001",
                   "runId": "20260706T132045Z",
-                  "temperature": 23.5,
-                  "humidity": 48.2,
-                  "co2": 615.0,
+                  "temperatureRaw": 23.5,
+                  "temperatureFiltered": 23.5,
+                  "humidityRaw": 48.2,
+                  "humidityFiltered": 48.2,
                   "battery": 87.0,
+                  "light": 4200.0,
                   "rssi": -62.0,
-                  "firmwareVersion": "firmware-1.0.0",
-                  "light": 4200.0
+                  "firmwareVersion": "firmware-1.0.0"
                 }
                 """;
         when(batchIngestService.enqueue(any())).thenReturn(false);
@@ -108,13 +111,14 @@ class MqttMessageHandlerTest {
                   "messageId": "message-002",
                   "nodeId": "test-node-001",
                   "runId": "20260706T132045Z",
-                  "temperature": 23.5,
-                  "humidity": 48.2,
-                  "co2": 615.0,
+                  "temperatureRaw": 23.5,
+                  "temperatureFiltered": 23.5,
+                  "humidityRaw": 48.2,
+                  "humidityFiltered": 48.2,
                   "battery": 87.0,
+                  "light": null,
                   "rssi": -62.0,
-                  "firmwareVersion": "firmware-1.0.0",
-                  "light": null
+                  "firmwareVersion": "firmware-1.0.0"
                 }
                 """;
         when(batchIngestService.enqueue(any())).thenReturn(true);
@@ -133,13 +137,14 @@ class MqttMessageHandlerTest {
                   "messageId": "message-001",
                   "nodeId": "test-node-001",
                   "runId": "20260706T132045Z",
-                  "temperature": 23.5,
-                  "humidity": 48.2,
-                  "co2": 615.0,
+                  "temperatureRaw": 23.5,
+                  "temperatureFiltered": 23.5,
+                  "humidityRaw": 48.2,
+                  "humidityFiltered": 48.2,
                   "battery": 87.0,
+                  "light": 4200.0,
                   "rssi": -62.0,
-                  "firmwareVersion": "firmware-1.0.0",
-                  "light": 4200.0
+                  "firmwareVersion": "firmware-1.0.0"
                 }
                 """;
 

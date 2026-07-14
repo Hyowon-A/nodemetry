@@ -15,7 +15,7 @@
    * @property {number|null} [rssi]
    * @property {number|null} [battery]
    * @property {string} [firmwareVersion]
-   * @property {{ temperature?: number|null, humidity?: number|null, co2?: number|null, light?: number|null }} [latest]
+   * @property {{ temperature?: number|null, humidity?: number|null, light?: number|null }} [latest]
    * @property {{ lastMessageAt?: number|null, throughput?: number }} [ingestion]
    *
    * @typedef {Object} LastExit

@@ -5,12 +5,13 @@ public record TelemetryMessage(
         String messageId,
         String nodeId,
         String runId,
-        Double temperature,
-        Double humidity,
-        Double co2,
+        Double temperatureRaw,
+        Double temperatureFiltered,
+        Double humidityRaw,
+        Double humidityFiltered,
         Double battery,
+        Double light,
         Double rssi,
-        String firmwareVersion,
-        Double light
+        String firmwareVersion
 ) {
 }

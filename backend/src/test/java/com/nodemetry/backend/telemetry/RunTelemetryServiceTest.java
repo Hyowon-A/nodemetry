@@ -60,12 +60,13 @@ class RunTelemetryServiceTest {
                 "node-001",
                 "run-001",
                 23.5,
+                23.5,
                 48.2,
-                615.0,
+                48.2,
                 87.0,
+                4200.0,
                 -62.0,
-                "firmware-1.0.0",
-                4200.0
+                "firmware-1.0.0"
         );
     }
 }

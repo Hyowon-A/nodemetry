@@ -207,7 +207,6 @@
     return (
       (node?.battery != null && node.battery < 20) ||
       (node?.rssi != null && node.rssi < -75) ||
-      (latest.co2 != null && latest.co2 > 1000) ||
       (latest.temperature != null && latest.temperature > 28) ||
       (latest.humidity != null && latest.humidity < 35) ||
       (latest.light != null && latest.light < 50)
@@ -459,7 +458,6 @@
       battery: node?.battery ?? null,
       temperature: latest.temperature ?? null,
       humidity: latest.humidity ?? null,
-      co2: latest.co2 ?? null,
       light: latest.light ?? null,
       firmwareVersion: node?.firmwareVersion ?? null,
       preview: node?.preview ?? false
@@ -598,12 +596,6 @@
             <div>
               <dt>humidity</dt>
               <dd>{num(hover.humidity, 0)}%</dd>
-            </div>
-          {/if}
-          {#if hover.co2 !== null}
-            <div>
-              <dt>co2</dt>
-              <dd>{Math.round(hover.co2)} ppm</dd>
             </div>
           {/if}
           {#if hover.light !== null}

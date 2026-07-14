@@ -49,13 +49,14 @@ public class TelemetryService {
                 message.messageId(),
                 message.nodeId(),
                 message.runId(),
-                message.temperature(),
-                message.humidity(),
-                message.co2(),
+                message.temperatureRaw(),
+                message.temperatureFiltered(),
+                message.humidityRaw(),
+                message.humidityFiltered(),
                 message.battery(),
+                message.light(),
                 message.rssi(),
-                message.firmwareVersion(),
-                message.light()
+                message.firmwareVersion()
         );
 
         readingRepository.save(reading);
