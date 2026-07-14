@@ -1,5 +1,4 @@
 <script>
-  import { dev } from '$app/environment';
   import { store } from '$lib/telemetry.svelte.js';
   import { clock, uptime } from '$lib/format.js';
 </script>
@@ -36,9 +35,7 @@
       <span class="eyebrow">node time</span>
       <span class="mono val">{clock(store.now)}</span>
     </div>
-    {#if dev}
-      <a class="feed nav" href="/load-tester">LOAD TESTER</a>
-    {/if}
+    <a class="feed nav" href="/load-tester">LOAD TESTER</a>
     <span class="feed status-indicator" class:on={store.connected} role="status" aria-live="polite">
       <span class="pip" class:live={store.connected}></span>
       {store.connected ? 'LIVE' : 'OFFLINE'}
