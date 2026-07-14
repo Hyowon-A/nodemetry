@@ -61,7 +61,7 @@ temperature, humidity, co2, light, battery, rssi, firmwareVersion
 ## What's on screen
 
 - **Top bar** — broker subscription, backend connection state, node uptime,
-  clock, and a link to the load tester view.
+  clock, and context navigation between the dashboard and load tester.
 - **Overview strip** — active nodes versus total nodes.
 - **Charts** — temperature, humidity, CO₂, and raw light for the selected node,
   with raw-vs-filtered traces for temperature and humidity.
@@ -80,12 +80,12 @@ temperature, humidity, co2, light, battery, rssi, firmwareVersion
 `/load-tester` shows the virtual-node topology and run history. The page is
 available in production as a read-only view.
 
-In development, the page also shows an experiment control panel that drives the
-Python simulator in `../simulator` through
+In development, the page also shows experiment controls and a snapshot panel.
+The controls drive the Python simulator in `../simulator` through
 `src/routes/api/simulator/+server.js` to generate load against the backend and
 record test runs (start/stop, node count, interval, QoS, duplicate rate). The
-control panel is hidden in production, and `/api/simulator` still returns
-**404** in any production build so nothing shippable can spawn simulator
+control and snapshot panels are hidden in production, and `/api/simulator` still
+returns **404** in any production build so nothing shippable can spawn simulator
 processes.
 
 ## Project layout
