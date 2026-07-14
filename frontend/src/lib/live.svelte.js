@@ -32,13 +32,11 @@ import {
   emptyHistory,
   emptyLatest,
   replaceNodeHistory,
-  selectedDashboardNode,
   selectedRunIdForNode
 } from '$lib/telemetry.svelte.js';
 
 const API = (env.PUBLIC_API_BASE || 'http://localhost:8080').replace(/\/$/, '');
 const WS_URL = env.PUBLIC_WS_URL || API.replace(/^http/, 'ws') + '/ws';
-const REST_REFRESH_MS = 10_000;
 
 /** Normalise a timestamp (ISO string or epoch) to epoch ms. */
 const ms = (t) => (typeof t === 'number' ? t : t ? Date.parse(t) : Date.now());
@@ -61,21 +59,6 @@ function mapNode(n) {
     lastSeenAt: n.lastSeenAt ? ms(n.lastSeenAt) : null,
     latest: emptyLatest(),
     history: emptyHistory()
-  };
-}
-
-function mergeNodeSummary(rawNode) {
-  const next = mapNode(rawNode);
-  const existing = store.nodes.find((node) => node.nodeId === next.nodeId);
-  if (!existing) return next;
-
-  return {
-    ...existing,
-    ...next,
-    latest: existing.latest ?? next.latest,
-    history: existing.history ?? next.history,
-    ingestion: existing.ingestion,
-    latestRunId: existing.latestRunId
   };
 }
 
@@ -144,39 +127,6 @@ async function seedHistory(node) {
 let stomp = null;
 let alive = false;
 let clockTimer = null;
-let restRefreshTimer = null;
-let restRefreshInFlight = false;
-
-async function refreshNodeSummaries() {
-  const nodes = (await getJSON('/api/v1/nodes')).map(mergeNodeSummary);
-  setNodes(nodes);
-}
-
-async function refreshSelectedHistory() {
-  const node = selectedDashboardNode();
-  if (!node) return;
-  await loadNodeHistory(node.nodeId, selectedRunIdForNode(node.nodeId));
-}
-
-async function refreshFromRest() {
-  if (!alive || restRefreshInFlight) return;
-  restRefreshInFlight = true;
-  try {
-    await refreshNodeSummaries();
-    await refreshSelectedHistory();
-  } catch (e) {
-    console.warn('[nodemetry] 10s REST refresh failed:', e.message);
-  } finally {
-    restRefreshInFlight = false;
-  }
-}
-
-function startRestRefresh() {
-  clearInterval(restRefreshTimer);
-  restRefreshTimer = setInterval(() => {
-    void refreshFromRest();
-  }, REST_REFRESH_MS);
-}
 
 /** Bootstrap from REST, then open the live STOMP connection. Returns nothing. */
 export async function connectLive() {
@@ -192,17 +142,14 @@ export async function connectLive() {
 
   // 1) initial state over REST
   try {
-    await refreshNodeSummaries();
-    const nodes = store.nodes;
+    const nodes = (await getJSON('/api/v1/nodes')).map(mapNode);
+    setNodes(nodes);
     await Promise.all(nodes.map(seedHistory));
   } catch (e) {
     console.error('[nodemetry] REST bootstrap failed — is PUBLIC_API_BASE correct?', e.message);
   }
 
-  // 2) periodic REST sync — keeps deployed dashboards fresh even if STOMP lags
-  startRestRefresh();
-
-  // 3) live stream — STOMP over WebSocket
+  // 2) live stream — STOMP over WebSocket
   openStomp();
 }
 
@@ -262,10 +209,7 @@ function openStomp() {
 export function disconnectLive() {
   alive = false;
   clearInterval(clockTimer);
-  clearInterval(restRefreshTimer);
   clockTimer = null;
-  restRefreshTimer = null;
-  restRefreshInFlight = false;
   setConnected(false);
   stomp?.deactivate();
   stomp = null;
