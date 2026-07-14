@@ -1,5 +1,6 @@
 package com.nodemetry.backend.mqtt;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nodemetry.backend.node.NodeService;
 import com.nodemetry.backend.telemetry.TelemetryBatchIngestService;
@@ -13,7 +14,10 @@ public class MqttMessageHandler {
 
     private record StatusMessage(String status) {}
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    // Ignore unknown/legacy JSON keys so producers sending extra fields (or fields since
+    // removed from the schema) are still ingested instead of dropped on a parse failure.
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     private final TelemetryBatchIngestService batchIngestService;
     private final NodeService nodeService;
 

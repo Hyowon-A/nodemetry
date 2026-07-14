@@ -1,6 +1,6 @@
 <script>
   import { dev } from '$app/environment';
-  import { store, toggleFeed } from '$lib/telemetry.svelte.js';
+  import { store } from '$lib/telemetry.svelte.js';
   import { clock, uptime } from '$lib/format.js';
 </script>
 
@@ -39,10 +39,10 @@
     {#if dev}
       <a class="feed nav" href="/load-tester">LOAD TESTER</a>
     {/if}
-    <button class="feed" class:on={store.connected} onclick={toggleFeed}>
+    <span class="feed status-indicator" class:on={store.connected} role="status" aria-live="polite">
       <span class="pip" class:live={store.connected}></span>
-      {store.connected ? 'LIVE' : 'PAUSED'}
-    </button>
+      {store.connected ? 'LIVE' : 'OFFLINE'}
+    </span>
   </div>
 </header>
 
@@ -139,12 +139,11 @@
     color: var(--live);
     border-color: color-mix(in srgb, var(--live) 45%, var(--line));
   }
-  .feed:hover {
+  .feed.nav:hover {
     border-color: var(--text-dim);
   }
-  .feed:disabled {
-    cursor: wait;
-    opacity: 0.7;
+  .status-indicator {
+    cursor: default;
   }
   .pip {
     width: 7px;

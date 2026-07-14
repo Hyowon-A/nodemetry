@@ -63,9 +63,10 @@ class TelemetryServiceTest {
         assertThat(savedReading.getMessageId()).isEqualTo(message.messageId());
         assertThat(savedReading.getNodeId()).isEqualTo(message.nodeId());
         assertThat(savedReading.getRunId()).isEqualTo(message.runId());
-        assertThat(savedReading.getTemperature()).isEqualTo(message.temperature());
-        assertThat(savedReading.getHumidity()).isEqualTo(message.humidity());
-        assertThat(savedReading.getCo2()).isEqualTo(message.co2());
+        assertThat(savedReading.getTemperatureRaw()).isEqualTo(message.temperatureRaw());
+        assertThat(savedReading.getTemperatureFiltered()).isEqualTo(message.temperatureFiltered());
+        assertThat(savedReading.getHumidityRaw()).isEqualTo(message.humidityRaw());
+        assertThat(savedReading.getHumidityFiltered()).isEqualTo(message.humidityFiltered());
         assertThat(savedReading.getLight()).isEqualTo(message.light());
         assertThat(savedReading.getBattery()).isEqualTo(message.battery());
         assertThat(savedReading.getRssi()).isEqualTo(message.rssi());
@@ -112,7 +113,7 @@ class TelemetryServiceTest {
     @Test
     void processTelemetryStoresNullLightForNodesWithoutLightSensor() {
         TelemetryMessage message = new TelemetryMessage(
-                "message-002", "node-001", "run-001", 23.5, 48.2, 615.0, 87.0, -62.0, "firmware-1.0.0", null
+                "message-002", "node-001", "run-001", 23.5, 23.5, 48.2, 48.2, 87.0, null, -62.0, "firmware-1.0.0"
         );
         when(nodeRepository.findByNodeId(message.nodeId())).thenReturn(Optional.empty());
 
@@ -166,12 +167,13 @@ class TelemetryServiceTest {
                 "node-001",
                 runId,
                 23.5,
+                23.5,
                 48.2,
-                615.0,
+                48.2,
                 87.0,
+                4200.0,
                 -62.0,
-                "firmware-1.0.0",
-                4200.0
+                "firmware-1.0.0"
         );
 
         assertThatThrownBy(() -> service.processTelemetry(message))
@@ -208,12 +210,13 @@ class TelemetryServiceTest {
                 nodeId,
                 "run-001",
                 23.5,
+                23.5,
                 48.2,
-                615.0,
+                48.2,
                 87.0,
+                4200.0,
                 -62.0,
-                firmwareVersion,
-                4200.0
+                firmwareVersion
         );
     }
 }

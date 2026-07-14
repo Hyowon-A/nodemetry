@@ -77,27 +77,25 @@ function historyFromRows(rows) {
   const h = emptyHistory();
   for (const r of rows) {
     h.t.push(readingTime(r));
-    h.temperature.push(r.temperature ?? null);
+    h.temperature.push(r.temperatureFiltered ?? r.temperature ?? null);
     h.temperatureRaw.push(r.temperatureRaw ?? r.temperature ?? null);
-    h.humidity.push(r.humidity ?? null);
+    h.humidity.push(r.humidityFiltered ?? r.humidity ?? null);
     h.humidityRaw.push(r.humidityRaw ?? r.humidity ?? null);
-    h.co2.push(r.co2 ?? null);
     h.lightRaw.push(r.lightRaw ?? r.light ?? null);
-    h.light.push(r.lightFiltered ?? r.light ?? null);
+    h.light.push(r.lightRaw ?? r.light ?? null);
   }
   return h;
 }
 
 export async function loadNodeHistory(nodeId, runId = null) {
   const rows = await getJSON(readingsPath(nodeId, runId));
-  const recent = rows
-    .sort((a, b) => readingTime(a) - readingTime(b))
-    .slice(-config.WINDOW);
+  const sortedRows = rows.sort((a, b) => readingTime(a) - readingTime(b));
+  const historyRows = runId ? sortedRows : sortedRows.slice(-config.WINDOW);
 
   if (selectedRunIdForNode(nodeId) !== (runId ?? null)) return 0;
 
-  replaceNodeHistory(nodeId, historyFromRows(recent));
-  return recent.length;
+  replaceNodeHistory(nodeId, historyFromRows(historyRows));
+  return historyRows.length;
 }
 
 async function seedHistory(node) {
@@ -110,7 +108,6 @@ async function seedHistory(node) {
         ? {
             temperature: h.temperature[lastIndex],
             humidity: h.humidity[lastIndex],
-            co2: h.co2[lastIndex],
             light: h.light[lastIndex]
           }
         : null;
@@ -119,7 +116,6 @@ async function seedHistory(node) {
       node.latest = {
         temperature: lastRow.temperature ?? prev.temperature,
         humidity: lastRow.humidity ?? prev.humidity,
-        co2: lastRow.co2 ?? prev.co2,
         light: lastRow.light ?? prev.light
       };
     }
@@ -173,11 +169,11 @@ function openStomp() {
             runId: r.runId,
             nodeId: r.nodeId,
             measuredAt: ms(r.measuredAt ?? r.receivedAt),
-            temperature: r.temperature,
-            humidity: r.humidity,
-            co2: r.co2,
+            temperatureRaw: r.temperatureRaw,
+            temperatureFiltered: r.temperatureFiltered,
+            humidityRaw: r.humidityRaw,
+            humidityFiltered: r.humidityFiltered,
             lightRaw: r.lightRaw ?? r.light,
-            lightFiltered: r.lightFiltered,
             light: r.light,
             battery: r.battery,
             rssi: r.rssi,

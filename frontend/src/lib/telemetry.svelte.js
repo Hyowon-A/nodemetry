@@ -27,12 +27,11 @@ const TICK_MS = 1800; // mock publish cadence
 
 /** Thresholds for alert rules (from the plan). */
 const RULES = {
-  co2Max: 1000,
   tempMax: 28,
   humidityMin: 35,
   batteryMin: 20,
   rssiMin: -75,
-  lightMin: 50   // lux — below this suggests a covered sensor or near-dark environment
+  lightMin: 50, // lux — below this suggests a covered sensor or near-dark environment
 };
 
 /* ----------------------------- state ----------------------------- */
@@ -41,7 +40,7 @@ export const store = $state({
   connected: false,
   startedAt: 0,
   now: Date.now(),
-  broker: 'hivemq-cloud · nodemetry/+/telemetry',
+  broker: "hivemq-cloud · nodemetry/+/telemetry",
   selectedNodeId: null,
   selectedRunIdsByNodeId: {},
   nodes: [],
@@ -54,19 +53,21 @@ export const store = $state({
     offlineNodes: 0,
     alertsCreated: 0,
     avgProcessingMs: 0,
-    throughput: 0
-  }
+    throughput: 0,
+  },
 });
 
 /** The currently selected node object (or first node). */
 export function selectedNode() {
   return (
-    store.nodes.find((n) => n.nodeId === store.selectedNodeId) ?? store.nodes[0] ?? null
+    store.nodes.find((n) => n.nodeId === store.selectedNodeId) ??
+    store.nodes[0] ??
+    null
   );
 }
 
 export function isVirtualNodeId(nodeId) {
-  return nodeId?.startsWith('vnode-') ?? false;
+  return nodeId?.startsWith("vnode-") ?? false;
 }
 
 export function dashboardNodes() {
@@ -75,7 +76,9 @@ export function dashboardNodes() {
 
 export function selectedDashboardNode() {
   const nodes = dashboardNodes();
-  return nodes.find((n) => n.nodeId === store.selectedNodeId) ?? nodes[0] ?? null;
+  return (
+    nodes.find((n) => n.nodeId === store.selectedNodeId) ?? nodes[0] ?? null
+  );
 }
 
 export function selectNode(id) {
@@ -96,7 +99,7 @@ export function selectNodeRun(nodeId, runId) {
   if (runId) {
     store.selectedRunIdsByNodeId = {
       ...store.selectedRunIdsByNodeId,
-      [nodeId]: runId
+      [nodeId]: runId,
     };
     return;
   }
@@ -131,7 +134,9 @@ export function setNodes(nodes) {
   for (const node of nodes) ensureNodeIngestion(node);
   store.nodes = nodes;
   store.selectedNodeId =
-    nodes.find((node) => node.nodeId === store.selectedNodeId)?.nodeId ?? nodes[0]?.nodeId ?? null;
+    nodes.find((node) => node.nodeId === store.selectedNodeId)?.nodeId ??
+    nodes[0]?.nodeId ??
+    null;
   recountNodes();
 }
 
@@ -151,19 +156,69 @@ export function setConnected(connected) {
 /* --------------------------- seed fleet --------------------------- */
 
 const SEED = [
-  { nodeId: 'living-room-01', name: 'Living Room', location: 'Flat A', fw: '0.4.1', base: { t: 22.4, h: 47, c: 610, l: 320 }, battery: 88, rssi: -58 },
-  { nodeId: 'bedroom-02', name: 'Bedroom', location: 'Flat A', fw: '0.4.1', base: { t: 21.1, h: 53, c: 540 }, battery: 71, rssi: -64 },
-  { nodeId: 'kitchen-03', name: 'Kitchen', location: 'Flat A', fw: '0.4.0', base: { t: 25.8, h: 41, c: 820, l: 850 }, battery: 54, rssi: -69, warmDrift: true },
-  { nodeId: 'office-04', name: 'Office', location: 'Flat B', fw: '0.4.1', base: { t: 23.0, h: 45, c: 660 }, battery: 33, rssi: -78 },
-  { nodeId: 'garage-05', name: 'Garage', location: 'Flat B', fw: '0.3.9', base: { t: 17.5, h: 60, c: 470 }, battery: 9, rssi: -82, offline: true }
+  {
+    nodeId: "living-room-01",
+    name: "Living Room",
+    location: "Flat A",
+    fw: "0.4.1",
+    base: { t: 22.4, h: 47, l: 320 },
+    battery: 88,
+    rssi: -58,
+  },
+  {
+    nodeId: "bedroom-02",
+    name: "Bedroom",
+    location: "Flat A",
+    fw: "0.4.1",
+    base: { t: 21.1, h: 53 },
+    battery: 71,
+    rssi: -64,
+  },
+  {
+    nodeId: "kitchen-03",
+    name: "Kitchen",
+    location: "Flat A",
+    fw: "0.4.0",
+    base: { t: 25.8, h: 41, l: 850 },
+    battery: 54,
+    rssi: -69,
+    warmDrift: true,
+  },
+  {
+    nodeId: "office-04",
+    name: "Office",
+    location: "Flat B",
+    fw: "0.4.1",
+    base: { t: 23.0, h: 45 },
+    battery: 33,
+    rssi: -78,
+  },
+  {
+    nodeId: "garage-05",
+    name: "Garage",
+    location: "Flat B",
+    fw: "0.3.9",
+    base: { t: 17.5, h: 60 },
+    battery: 9,
+    rssi: -82,
+    offline: true,
+  },
 ];
 
 export function emptyHistory() {
-  return { t: [], temperature: [], temperatureRaw: [], humidity: [], humidityRaw: [], co2: [], light: [], lightRaw: [] };
+  return {
+    t: [],
+    temperature: [],
+    temperatureRaw: [],
+    humidity: [],
+    humidityRaw: [],
+    light: [],
+    lightRaw: [],
+  };
 }
 
 export function emptyLatest() {
-  return { temperature: null, humidity: null, co2: null, light: null };
+  return { temperature: null, humidity: null, light: null };
 }
 
 export function emptyIngestionMetrics() {
@@ -174,7 +229,7 @@ export function emptyIngestionMetrics() {
     alertsCreated: 0,
     avgProcessingMs: 0,
     throughput: 0,
-    lastMessageAt: null
+    lastMessageAt: null,
   };
 }
 
@@ -191,7 +246,7 @@ function seedNodes() {
     name: s.name,
     location: s.location,
     firmwareVersion: s.fw,
-    status: s.offline ? 'offline' : 'online',
+    status: s.offline ? "offline" : "online",
     battery: s.battery,
     rssi: s.rssi,
     lastSeenAt: s.offline ? now - 1000 * 60 * 4 : now,
@@ -199,9 +254,13 @@ function seedNodes() {
     warmDrift: !!s.warmDrift,
     latest: s.offline
       ? emptyLatest()
-      : { temperature: s.base.t, humidity: s.base.h, co2: s.base.c, light: s.base.l ?? null },
+      : {
+          temperature: s.base.t,
+          humidity: s.base.h,
+          light: s.base.l ?? null,
+        },
     history: emptyHistory(),
-    ingestion: emptyIngestionMetrics()
+    ingestion: emptyIngestionMetrics(),
   }));
 }
 
@@ -210,9 +269,9 @@ function seedNodes() {
 const rnd = (a, b) => Math.random() * (b - a) + a;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-function pushPoint(arr, v) {
+function pushPoint(arr, v, limit = WINDOW) {
   arr.push(v);
-  if (arr.length > WINDOW) arr.shift();
+  if (limit !== null && arr.length > limit) arr.shift();
 }
 
 /* ----------------------- ingestion pipeline ----------------------- */
@@ -266,15 +325,15 @@ export function applyReading(r) {
     node = {
       nodeId: r.nodeId,
       name: r.nodeId,
-      location: '',
-      firmwareVersion: r.firmwareVersion ?? '—',
-      status: 'online',
+      location: "",
+      firmwareVersion: r.firmwareVersion ?? "—",
+      status: "online",
       battery: r.battery ?? null,
       rssi: r.rssi ?? null,
       lastSeenAt: t,
       latest: emptyLatest(),
       history: emptyHistory(),
-      ingestion: emptyIngestionMetrics()
+      ingestion: emptyIngestionMetrics(),
     };
     store.nodes.push(node);
     store.selectedNodeId ??= node.nodeId;
@@ -292,29 +351,37 @@ export function applyReading(r) {
   if (r.messageId) seenMessageIds.add(r.messageId);
 
   node.lastSeenAt = t;
-  if (node.status !== 'online') node.status = 'online';
+  if (node.status !== "online") node.status = "online";
   if (r.battery !== undefined && r.battery !== null) node.battery = r.battery;
   if (r.rssi !== undefined && r.rssi !== null) node.rssi = r.rssi;
   if (r.firmwareVersion) node.firmwareVersion = r.firmwareVersion;
   if (r.runId) node.latestRunId = r.runId;
 
   node.latest = {
-    temperature: r.temperatureFiltered ?? r.temperature ?? node.latest.temperature,
+    temperature:
+      r.temperatureFiltered ?? r.temperature ?? node.latest.temperature,
     humidity: r.humidityFiltered ?? r.humidity ?? node.latest.humidity,
-    co2: r.co2 ?? node.latest.co2,
-    light: r.lightFiltered ?? r.light ?? node.latest.light
+    light: r.lightRaw ?? r.light ?? node.latest.light,
   };
 
   const selectedRunId = selectedRunIdForNode(node.nodeId);
   if (!selectedRunId || r.runId === selectedRunId) {
-    pushPoint(node.history.t, t);
-    pushPoint(node.history.temperature, node.latest.temperature);
-    pushPoint(node.history.temperatureRaw, r.temperatureRaw ?? node.latest.temperature);
-    pushPoint(node.history.humidity, node.latest.humidity);
-    pushPoint(node.history.humidityRaw, r.humidityRaw ?? node.latest.humidity);
-    pushPoint(node.history.co2, node.latest.co2);
-    pushPoint(node.history.lightRaw, r.lightRaw ?? r.light ?? node.latest.light);
-    pushPoint(node.history.light, node.latest.light);
+    const historyLimit = selectedRunId ? null : WINDOW;
+    pushPoint(node.history.t, t, historyLimit);
+    pushPoint(node.history.temperature, node.latest.temperature, historyLimit);
+    pushPoint(
+      node.history.temperatureRaw,
+      r.temperatureRaw ?? node.latest.temperature,
+      historyLimit,
+    );
+    pushPoint(node.history.humidity, node.latest.humidity, historyLimit);
+    pushPoint(node.history.humidityRaw, r.humidityRaw ?? node.latest.humidity, historyLimit);
+    pushPoint(
+      node.history.lightRaw,
+      r.lightRaw ?? r.light ?? node.latest.light,
+      historyLimit,
+    );
+    pushPoint(node.history.light, node.latest.light, historyLimit);
   }
   ensureNodeIngestion(node).messagesSaved++;
   recountNodes();
@@ -323,8 +390,10 @@ export function applyReading(r) {
     store.metrics.messagesSaved++;
     // rolling average processing time (purely illustrative)
     const proc = rnd(1.4, 6.2);
-    store.metrics.avgProcessingMs = store.metrics.avgProcessingMs * 0.9 + proc * 0.1;
-    node.ingestion.avgProcessingMs = node.ingestion.avgProcessingMs * 0.9 + proc * 0.1;
+    store.metrics.avgProcessingMs =
+      store.metrics.avgProcessingMs * 0.9 + proc * 0.1;
+    node.ingestion.avgProcessingMs =
+      node.ingestion.avgProcessingMs * 0.9 + proc * 0.1;
     evaluateAlerts(node);
   }
 }
@@ -335,10 +404,15 @@ export function applyStatus(nodeId, status, reason) {
   if (!node) return;
   const was = node.status;
   node.status = status;
-  if (status === 'offline') {
+  if (status === "offline") {
     node.lastSeenAt = node.lastSeenAt || Date.now();
-    if (was === 'online') {
-      pushAlert(node.nodeId, 'offline', 'critical', `Node went offline${reason ? ` (${reason})` : ''}`);
+    if (was === "online") {
+      pushAlert(
+        node.nodeId,
+        "offline",
+        "critical",
+        `Node went offline${reason ? ` (${reason})` : ""}`,
+      );
     }
   } else {
     activeAlertKeys.delete(`${nodeId}:offline`);
@@ -367,7 +441,7 @@ function pushAlert(nodeId, type, severity, message) {
     severity,
     message,
     acknowledged: false,
-    createdAt: Date.now()
+    createdAt: Date.now(),
   });
   if (store.alerts.length > 40) store.alerts.pop();
   store.metrics.alertsCreated++;
@@ -381,14 +455,40 @@ function clearAlert(nodeId, type) {
 function evaluateAlerts(node) {
   const l = node.latest;
   const check = (cond, type, severity, msg) =>
-    cond ? pushAlert(node.nodeId, type, severity, msg) : clearAlert(node.nodeId, type);
+    cond
+      ? pushAlert(node.nodeId, type, severity, msg)
+      : clearAlert(node.nodeId, type);
 
-  check(l.co2 != null && l.co2 > RULES.co2Max, 'co2', 'critical', `CO₂ ${Math.round(l.co2)} ppm exceeds ${RULES.co2Max}`);
-  check(l.temperature != null && l.temperature > RULES.tempMax, 'temp', 'warning', `Temperature ${l.temperature.toFixed(1)}°C above ${RULES.tempMax}°C`);
-  check(l.humidity != null && l.humidity < RULES.humidityMin, 'humidity', 'warning', `Humidity ${l.humidity.toFixed(0)}% below ${RULES.humidityMin}%`);
-  check(node.battery != null && node.battery < RULES.batteryMin, 'battery', 'warning', `Battery ${Math.round(node.battery)}% — replace soon`);
-  check(node.rssi != null && node.rssi < RULES.rssiMin, 'rssi', 'info', `Weak signal ${Math.round(node.rssi)} dBm`);
-  check(l.light != null && l.light < RULES.lightMin, 'light', 'warning', `Light ${Math.round(l.light)} lux below ${RULES.lightMin}`);
+  check(
+    l.temperature != null && l.temperature > RULES.tempMax,
+    "temp",
+    "warning",
+    `Temperature ${l.temperature.toFixed(1)}°C above ${RULES.tempMax}°C`,
+  );
+  check(
+    l.humidity != null && l.humidity < RULES.humidityMin,
+    "humidity",
+    "warning",
+    `Humidity ${l.humidity.toFixed(0)}% below ${RULES.humidityMin}%`,
+  );
+  check(
+    node.battery != null && node.battery < RULES.batteryMin,
+    "battery",
+    "warning",
+    `Battery ${Math.round(node.battery)}% — replace soon`,
+  );
+  check(
+    node.rssi != null && node.rssi < RULES.rssiMin,
+    "rssi",
+    "info",
+    `Weak signal ${Math.round(node.rssi)} dBm`,
+  );
+  check(
+    l.light != null && l.light < RULES.lightMin,
+    "light",
+    "warning",
+    `Light ${Math.round(l.light)} lux below ${RULES.lightMin}`,
+  );
 }
 
 /* ----------------------- mock MQTT generator ---------------------- */
@@ -403,7 +503,6 @@ function makeReading(node) {
   // random walk around baseline; kitchen drifts warm to demo an alert
   b.t = clamp(b.t + rnd(-0.25, node.warmDrift ? 0.4 : 0.25), 16, 31);
   b.h = clamp(b.h + rnd(-0.7, 0.7), 28, 70);
-  b.c = clamp(b.c + rnd(-30, node.nodeId === 'kitchen-03' ? 55 : 30), 400, 1300);
   if (b.l != null) b.l = clamp(b.l + rnd(-50, 50), 0, 100000);
 
   const tNoise = rnd(-0.5, 0.5);
@@ -412,27 +511,25 @@ function makeReading(node) {
   msgSeq++;
 
   return {
-    messageId: `${node.nodeId}-${String(msgSeq).padStart(6, '0')}`,
+    messageId: `${node.nodeId}-${String(msgSeq).padStart(6, "0")}`,
     nodeId: node.nodeId,
     measuredAt: Date.now(),
     temperatureRaw: +(b.t + tNoise).toFixed(2),
     temperatureFiltered: +b.t.toFixed(2),
     humidityRaw: +(b.h + hNoise).toFixed(2),
     humidityFiltered: +b.h.toFixed(2),
-    co2: Math.round(b.c),
     battery: +(node.battery - rnd(0, 0.05)).toFixed(2),
     rssi: Math.round(clamp(node.rssi + rnd(-3, 3), -92, -45)),
     firmwareVersion: node.firmwareVersion,
     lightRaw: b.l != null ? +clamp(b.l + lNoise, 0, 100000).toFixed(2) : null,
-    lightFiltered: b.l != null ? +b.l.toFixed(2) : null,
-    light: b.l != null ? +b.l.toFixed(2) : null
+    light: b.l != null ? +clamp(b.l + lNoise, 0, 100000).toFixed(2) : null,
   };
 }
 
 function tick() {
   let countThisTick = 0;
   for (const node of store.nodes) {
-    if (node.status !== 'online') continue;
+    if (node.status !== "online") continue;
     const r = makeReading(node);
     applyReading(r);
     countThisTick++;
@@ -455,16 +552,20 @@ function tick() {
 }
 
 function recountNodes() {
-  store.metrics.activeNodes = store.nodes.filter((n) => n.status === 'online').length;
-  store.metrics.offlineNodes = store.nodes.filter((n) => n.status !== 'online').length;
+  store.metrics.activeNodes = store.nodes.filter(
+    (n) => n.status === "online",
+  ).length;
+  store.metrics.offlineNodes = store.nodes.filter(
+    (n) => n.status !== "online",
+  ).length;
 }
 
 /** Scheduled offline detection (mirrors the backend's @Scheduled sweep). */
 function sweepOffline() {
   const now = Date.now();
   for (const node of store.nodes) {
-    if (node.status === 'online' && now - node.lastSeenAt > TICK_MS * 4) {
-      applyStatus(node.nodeId, 'offline', 'no_telemetry');
+    if (node.status === "online" && now - node.lastSeenAt > TICK_MS * 4) {
+      applyStatus(node.nodeId, "offline", "no_telemetry");
     }
   }
 }
@@ -497,22 +598,6 @@ export function stopFeed() {
   tickHandle = null;
   clockHandle = null;
   store.connected = false;
-}
-
-/** Pause / resume button in the top bar. */
-export function toggleFeed() {
-  if (tickHandle) stopFeed();
-  else {
-    store.connected = true;
-    store.startedAt = store.startedAt || Date.now();
-    tickHandle = setInterval(() => {
-      sweepOffline();
-      tick();
-    }, TICK_MS);
-    clockHandle = setInterval(() => {
-      store.now = Date.now();
-    }, 1000);
-  }
 }
 
 export const config = { WINDOW, TICK_MS, RULES };

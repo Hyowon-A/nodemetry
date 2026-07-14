@@ -62,9 +62,10 @@ class TelemetryBatchIngestServiceTest {
                     message_id varchar(255) not null unique,
                     node_id varchar(255) not null,
                     run_id varchar(255),
-                    temperature float(53),
-                    humidity float(53),
-                    co2 float(53),
+                    temperature_raw float(53),
+                    temperature_filtered float(53),
+                    humidity_raw float(53),
+                    humidity_filtered float(53),
                     battery float(53),
                     rssi float(53),
                     firmware_version varchar(255),
@@ -114,12 +115,13 @@ class TelemetryBatchIngestServiceTest {
                 "node-001",
                 "",
                 23.5,
+                23.5,
                 48.2,
-                615.0,
+                48.2,
                 87.0,
+                4200.0,
                 -62.0,
-                "firmware-1.0.0",
-                4200.0
+                "firmware-1.0.0"
         ));
 
         assertThat(service.drainOnce()).isEqualTo(1);
@@ -166,12 +168,13 @@ class TelemetryBatchIngestServiceTest {
                 nodeId,
                 runId,
                 23.5,
+                23.5,
                 48.2,
-                615.0,
+                48.2,
                 battery,
+                4200.0,
                 -62.0,
-                "firmware-1.0.0",
-                4200.0
+                "firmware-1.0.0"
         );
     }
 }
