@@ -217,11 +217,10 @@
         {dev ? `run ${runIdLabel(tester.currentRunId)}` : 'read-only view'}
       </p>
     </div>
-    <a class="return-link mono" href="/">DASHBOARD</a>
   </section>
 
-  <div class="tester-grid" class:viewer-only={!dev}>
-    {#if dev}
+  {#if dev}
+    <div class="tester-grid">
       <section class="panel controls-panel">
         <div class="head">
           <span class="eyebrow">experiment controls</span>
@@ -324,24 +323,24 @@
           <pre class="log mono">{tester.logTail}</pre>
         {/if}
       </section>
-    {/if}
 
-    <section class="panel summary-panel">
-      <div class="head">
-        <span class="eyebrow">experiment snapshot</span>
-        <span class="hint mono">{dev ? `duplicate target ${pct(tester.options.duplicateRate)}` : 'read only'}</span>
-      </div>
+      <section class="panel summary-panel">
+        <div class="head">
+          <span class="eyebrow">experiment snapshot</span>
+          <span class="hint mono">duplicate target {pct(tester.options.duplicateRate)}</span>
+        </div>
 
-      <div class="cards">
-        {#each summaryCards as card (card.label)}
-          <div class="cell">
-            <span class="eyebrow">{card.label}</span>
-            <span class="value mono" class:accent={card.accent} class:warn={card.warn}>{card.value}</span>
-          </div>
-        {/each}
-      </div>
-    </section>
-  </div>
+        <div class="cards">
+          {#each summaryCards as card (card.label)}
+            <div class="cell">
+              <span class="eyebrow">{card.label}</span>
+              <span class="value mono" class:accent={card.accent} class:warn={card.warn}>{card.value}</span>
+            </div>
+          {/each}
+        </div>
+      </section>
+    </div>
+  {/if}
 
   <VNodeTopology
     nodes={virtualNodes}
@@ -391,7 +390,6 @@
     margin: 0 8px;
     color: var(--text-faint);
   }
-  .return-link,
   .action,
   .secondary {
     display: inline-flex;
@@ -410,7 +408,6 @@
     text-decoration: none;
     white-space: nowrap;
   }
-  .return-link:hover,
   .action:hover,
   .secondary:hover {
     border-color: var(--text-dim);
@@ -420,9 +417,6 @@
     grid-template-columns: minmax(360px, 0.9fr) minmax(0, 1.3fr);
     gap: var(--gap);
     align-items: start;
-  }
-  .tester-grid.viewer-only {
-    grid-template-columns: minmax(0, 1fr);
   }
   .panel {
     padding: 16px;
