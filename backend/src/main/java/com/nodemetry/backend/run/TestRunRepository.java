@@ -14,16 +14,17 @@ public interface TestRunRepository extends JpaRepository<TestRun, Long> {
     boolean existsByRunId(String runId);
     List<TestRun> findAllByOrderByStartedAtDesc();
 
-    // Absolute write (not increment) so it is idempotent while the run is active:
-    // the in-memory LongAdders are the source of truth and this mirrors their
-    // running totals. Ended runs are frozen by endRun and ignored here so late
-    // readings cannot change run-history totals after the duration is done.
+    // Absolute write (not increment) so it is idempotent: RunRegistry reconciles
+    // its in-memory events against sensor_readings and mirrors the result here.
+    // Ended runs are still written during the registry's post-end grace window so
+    // late batches settle into the final totals; writes stop once the registry
+    // evicts the run's counters.
     @Transactional
     @Modifying
     @Query("""
             update TestRun r
             set r.totalSaved = :saved, r.duplicatesSkipped = :dupes
-            where r.runId = :runId and r.endedAt is null
+            where r.runId = :runId
             """)
     int updateCounters(@Param("runId") String runId, @Param("saved") long saved, @Param("dupes") long dupes);
 }
