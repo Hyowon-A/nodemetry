@@ -34,18 +34,21 @@ class TestRunRepositoryTest {
     }
 
     @Test
-    void updateCountersDoesNotUpdateEndedRun() {
+    void updateCountersAlsoUpdatesEndedRun() {
+        // RunRegistry keeps reconciling for a grace window after a run ends so
+        // late batches settle into the final totals; the write must not be
+        // blocked by endedAt being set.
         TestRun run = run("run-001", Instant.now());
         run.setTotalSaved(4);
         run.setDuplicatesSkipped(1);
         repository.saveAndFlush(run);
 
-        assertThat(repository.updateCounters("run-001", 7, 3)).isZero();
+        assertThat(repository.updateCounters("run-001", 7, 3)).isEqualTo(1);
         entityManager.clear();
 
         TestRun updated = repository.findByRunId("run-001").orElseThrow();
-        assertThat(updated.getTotalSaved()).isEqualTo(4);
-        assertThat(updated.getDuplicatesSkipped()).isEqualTo(1);
+        assertThat(updated.getTotalSaved()).isEqualTo(7);
+        assertThat(updated.getDuplicatesSkipped()).isEqualTo(3);
     }
 
     private TestRun run(String runId, Instant endedAt) {

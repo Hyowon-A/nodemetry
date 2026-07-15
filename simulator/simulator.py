@@ -31,6 +31,7 @@ import email.utils
 import json
 import os
 import random
+import secrets
 import signal
 import ssl
 import sys
@@ -66,6 +67,35 @@ class Stats:
 
 STATS = Stats()
 STOP = threading.Event()
+START = threading.Event()
+
+
+class WarmupGate:
+    def __init__(self, expected):
+        self.expected = expected
+        self.ready = 0
+        self.failed = 0
+        self._condition = threading.Condition()
+
+    def mark_ready(self):
+        with self._condition:
+            self.ready += 1
+            self._condition.notify_all()
+
+    def mark_failed(self):
+        with self._condition:
+            self.failed += 1
+            self._condition.notify_all()
+
+    def wait_until_settled(self):
+        with self._condition:
+            self._condition.wait_for(
+                lambda: self.ready + self.failed >= self.expected or STOP.is_set()
+            )
+
+    def snapshot(self):
+        with self._condition:
+            return self.ready, self.failed, self.expected
 
 
 # ----------------------------------------------------------------------------
@@ -143,8 +173,12 @@ def format_run_id_from_time_tuple(time_tuple):
     return time.strftime("%Y%m%dT%H%M%SZ", time_tuple)
 
 
+def unique_run_id(timestamp):
+    return f"{timestamp}-{secrets.token_hex(4)}"
+
+
 def local_utc_run_id():
-    return format_run_id_from_time_tuple(time.gmtime())
+    return unique_run_id(format_run_id_from_time_tuple(time.gmtime()))
 
 
 def internet_utc_run_id(timeout=3):
@@ -158,7 +192,8 @@ def internet_utc_run_id(timeout=3):
     if not date_header:
         raise RuntimeError("missing Date header")
     internet_time = email.utils.parsedate_to_datetime(date_header)
-    return internet_time.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = internet_time.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return unique_run_id(timestamp)
 
 
 def default_run_id():
@@ -190,7 +225,14 @@ def make_client(client_id, args):
 # Per-node-connection mode: one TCP connection per virtual node (most realistic,
 # best for testing Last Will / offline detection; limited by broker conn cap).
 # ----------------------------------------------------------------------------
-def run_node_dedicated(node, args):
+def wait_for_measurement_start():
+    while not STOP.is_set():
+        if START.wait(timeout=0.1):
+            return True
+    return False
+
+
+def run_node_dedicated(node, args, ready_gate):
     client = make_client(f"sim-{node.node_id}", args)
     status_topic = topic(args.prefix, node.node_id, "status")
     # Last Will: broker publishes this if the connection drops uncleanly.
@@ -200,13 +242,21 @@ def run_node_dedicated(node, args):
         client.connect(args.broker, args.port, keepalive=int(max(30, args.interval * 2)))
     except Exception as exc:  # noqa: BLE001
         print(f"[{node.node_id}] connect failed: {exc}", file=sys.stderr)
+        ready_gate.mark_failed()
         return
     client.loop_start()
+    ready_gate.mark_ready()
+
+    if not wait_for_measurement_start():
+        client.loop_stop()
+        client.disconnect()
+        return
+
     client.publish(status_topic, status_payload("online"), qos=1, retain=True)
 
     tele_topic = topic(args.prefix, node.node_id, "telemetry")
     # Spread first publishes across the interval so they don't all fire at once.
-    time.sleep(random.uniform(0, args.interval))
+    STOP.wait(random.uniform(0, args.interval))
 
     while not STOP.is_set():
         _publish_once(client, node, tele_topic, args)
@@ -224,14 +274,21 @@ def run_node_dedicated(node, args):
 # Shared-connection mode: a few connections each drive many virtual nodes.
 # Use this to reach high message rates on connection-capped free brokers.
 # ----------------------------------------------------------------------------
-def run_shared_connection(conn_index, nodes, args):
+def run_shared_connection(conn_index, nodes, args, ready_gate):
     client = make_client(f"sim-shared-{conn_index}", args)
     try:
         client.connect(args.broker, args.port, keepalive=60)
     except Exception as exc:  # noqa: BLE001
         print(f"[conn-{conn_index}] connect failed: {exc}", file=sys.stderr)
+        ready_gate.mark_failed()
         return
     client.loop_start()
+    ready_gate.mark_ready()
+
+    if not wait_for_measurement_start():
+        client.loop_stop()
+        client.disconnect()
+        return
 
     for n in nodes:
         client.publish(topic(args.prefix, n.node_id, "status"), status_payload("online"), qos=1, retain=True)
@@ -243,8 +300,10 @@ def run_shared_connection(conn_index, nodes, args):
     count = len(nodes)
     offsets = [i * args.interval / count for i in range(count)] if count else []
 
-    # Desynchronise connections so their cycles don't all start in lockstep.
-    STOP.wait(random.uniform(0, args.interval))
+    # Keep manual CLI behavior unchanged. The API-gated path has already spent
+    # this phase warming up, so don't add startup loss to the measured window.
+    if not args.start_gate_stdin:
+        STOP.wait(random.uniform(0, args.interval))
 
     while not STOP.is_set():
         cycle_start = time.time()
@@ -332,13 +391,18 @@ def parse_args():
         "--run-id",
         help=(
             "run id sent as runId and included in messageId "
-            "(default: online UTC timestamp, e.g. 20260706T132045Z)"
+            "(default: online UTC timestamp plus random suffix, e.g. 20260706T132045Z-a1b2c3d4)"
         ),
     )
     p.add_argument("--duration", type=float, default=0, help="stop after N seconds (0 = run until Ctrl+C)")
     p.add_argument("--duplicate-rate", type=float, default=0.0, help="fraction (0-1) of messages re-sent with same messageId")
     p.add_argument("--shared", action="store_true", help="multiplex nodes over a few connections (for capped brokers)")
     p.add_argument("--connections", type=int, default=5, help="connections to use in --shared mode")
+    p.add_argument(
+        "--start-gate-stdin",
+        action="store_true",
+        help="connect clients, print READY, then wait for 'start' on stdin before publishing telemetry",
+    )
     args = p.parse_args()
     if args.node_prefix is None:
         args.node_prefix = "test-node" if args.test else "vnode"
@@ -350,6 +414,9 @@ def parse_args():
 def main():
     args = parse_args()
     nodes = build_nodes(args)
+    groups = chunk(nodes, args.connections) if args.shared else []
+    expected_connections = len(groups) if args.shared else len(nodes)
+    ready_gate = WarmupGate(expected_connections)
 
     expected_rate = args.nodes / args.interval if args.interval else 0
     mode = f"shared/{args.connections} conns" if args.shared else "one conn per node"
@@ -367,18 +434,36 @@ def main():
     signal.signal(signal.SIGINT, handle_sigint)
     signal.signal(signal.SIGTERM, handle_sigint)
 
+    if not args.start_gate_stdin:
+        START.set()
+
     threads = []
     if args.shared:
-        for idx, group in enumerate(chunk(nodes, args.connections)):
-            t = threading.Thread(target=run_shared_connection, args=(idx, group, args), daemon=True)
+        for idx, group in enumerate(groups):
+            t = threading.Thread(target=run_shared_connection, args=(idx, group, args, ready_gate), daemon=True)
             t.start()
             threads.append(t)
     else:
         for node in nodes:
-            t = threading.Thread(target=run_node_dedicated, args=(node, args), daemon=True)
+            t = threading.Thread(target=run_node_dedicated, args=(node, args, ready_gate), daemon=True)
             t.start()
             threads.append(t)
             time.sleep(0.005)  # gentle connection ramp to avoid a thundering herd
+
+    if args.start_gate_stdin:
+        ready_gate.wait_until_settled()
+        ready, failed, expected = ready_gate.snapshot()
+        if failed or ready < expected:
+            print(f"WARMUP_FAILED warmup_connected={ready}/{expected} failures={failed}", flush=True)
+            STOP.set()
+        else:
+            print(f"READY warmup_connected={ready}/{expected}", flush=True)
+            command = sys.stdin.readline().strip().lower()
+            if command == "start":
+                START.set()
+            else:
+                print("Start gate closed before measurement began", file=sys.stderr, flush=True)
+                STOP.set()
 
     start = time.time()
     try:

@@ -11,6 +11,8 @@ public interface SensorReadingRepository extends JpaRepository<SensorReading, Lo
 
     Optional<SensorReading> findTopByNodeIdOrderByReceivedAtDesc(String nodeId);
 
+    long countByRunId(String runId);
+
     List<SensorReading> findTop100ByNodeIdOrderByReceivedAtDesc(String nodeId);
 
     List<SensorReading> findByNodeIdAndRunIdOrderByReceivedAtDesc(String nodeId, String runId);

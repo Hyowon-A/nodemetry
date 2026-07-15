@@ -183,8 +183,7 @@
   </div>
 
   <footer class="foot mono">
-    nodemetry · esp32 → mqtt → spring boot → postgresql → websocket dashboard
-    <span class="sep">·</span> demo feed simulated client-side — see <code>src/lib/telemetry.svelte.js</code> to connect the real backend
+    nodemetry · esp32 → mqtt/tls → spring boot → postgresql → websocket
   </footer>
 </main>
 

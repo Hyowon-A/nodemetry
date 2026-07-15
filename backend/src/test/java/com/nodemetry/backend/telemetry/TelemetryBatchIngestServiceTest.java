@@ -16,6 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -106,6 +107,23 @@ class TelemetryBatchIngestServiceTest {
         assertThat(count("sensor_readings")).isEqualTo(1);
         verify(runRegistry).recordSaved("run-001", 1L);
         verify(runRegistry).recordDupe("run-001", 1L);
+    }
+
+    @Test
+    void drainOnceTreatsStoredMessageIdAsDuplicate() {
+        service.enqueue(message("message-001", "node-001", "run-001", 87.0));
+
+        assertThat(service.drainOnce()).isEqualTo(1);
+        clearInvocations(runRegistry, messagingTemplate);
+
+        service.enqueue(message("message-001", "node-001", "run-001", 86.0));
+
+        assertThat(service.drainOnce()).isEqualTo(1);
+
+        assertThat(count("sensor_readings")).isEqualTo(1);
+        verify(runRegistry, never()).recordSaved(any(), anyLong());
+        verify(runRegistry).recordDupe("run-001", 1L);
+        verifyNoInteractions(messagingTemplate);
     }
 
     @Test

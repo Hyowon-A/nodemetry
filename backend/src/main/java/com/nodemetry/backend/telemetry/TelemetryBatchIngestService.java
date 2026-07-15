@@ -12,10 +12,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.LongAdder;
@@ -115,9 +116,14 @@ public class TelemetryBatchIngestService {
         }
 
         return transactionTemplate.execute(status -> {
-            upsertNodes(readings);
-            int[] insertCounts = insertReadings(readings);
-            return summarize(readings, insertCounts, dupesByRunId);
+            List<QueuedReading> newReadings = excludeExistingReadings(readings, dupesByRunId);
+            if (newReadings.isEmpty()) {
+                return new BatchResult(List.of(), Map.of(), dupesByRunId);
+            }
+
+            upsertNodes(newReadings);
+            insertReadings(newReadings);
+            return summarizeInserted(newReadings, dupesByRunId);
         });
     }
 
@@ -163,8 +169,8 @@ public class TelemetryBatchIngestService {
         });
     }
 
-    private int[] insertReadings(List<QueuedReading> readings) {
-        int[][] counts = jdbcTemplate.batchUpdate("""
+    private void insertReadings(List<QueuedReading> readings) {
+        jdbcTemplate.batchUpdate("""
                 insert into sensor_readings (
                     message_id, node_id, run_id, temperature_raw, temperature_filtered,
                     humidity_raw, humidity_filtered, battery, light, rssi, firmware_version,
@@ -189,28 +195,59 @@ public class TelemetryBatchIngestService {
             ps.setTimestamp(13, Timestamp.from(reading.receivedAt()));
             ps.setString(14, message.messageId());
         });
-        return Arrays.stream(counts).flatMapToInt(Arrays::stream).toArray();
     }
 
-    private BatchResult summarize(
+    private List<QueuedReading> excludeExistingReadings(
             List<QueuedReading> readings,
-            int[] insertCounts,
-            Map<String, Long> initialDupesByRunId
+            Map<String, Long> dupesByRunId
+    ) {
+        Set<String> existingMessageIds = existingMessageIds(readings);
+        if (existingMessageIds.isEmpty()) {
+            return readings;
+        }
+
+        List<QueuedReading> newReadings = new ArrayList<>();
+        for (QueuedReading reading : readings) {
+            String messageId = reading.message().messageId();
+            if (existingMessageIds.contains(messageId)) {
+                dupesByRunId.merge(reading.message().runId(), 1L, Long::sum);
+            } else {
+                newReadings.add(reading);
+            }
+        }
+        return newReadings;
+    }
+
+    private Set<String> existingMessageIds(List<QueuedReading> readings) {
+        if (readings.isEmpty()) {
+            return Set.of();
+        }
+
+        StringBuilder sql = new StringBuilder("select message_id from sensor_readings where message_id in (");
+        Object[] params = new Object[readings.size()];
+        for (int i = 0; i < readings.size(); i++) {
+            if (i > 0) {
+                sql.append(", ");
+            }
+            sql.append("?");
+            params[i] = readings.get(i).message().messageId();
+        }
+        sql.append(")");
+
+        return new LinkedHashSet<>(jdbcTemplate.queryForList(sql.toString(), String.class, params));
+    }
+
+    private BatchResult summarizeInserted(
+            List<QueuedReading> readings,
+            Map<String, Long> dupesByRunId
     ) {
         List<SensorReadingResponse> insertedReadings = new ArrayList<>();
         Map<String, Long> savedByRunId = new LinkedHashMap<>();
-        Map<String, Long> dupesByRunId = new LinkedHashMap<>(initialDupesByRunId);
 
-        for (int i = 0; i < readings.size(); i++) {
-            QueuedReading reading = readings.get(i);
-            int count = insertCounts[i];
+        for (QueuedReading reading : readings) {
             String runId = reading.message().runId();
-            if (count > 0) {
-                insertedReadings.add(reading.toResponse());
-                savedByRunId.merge(runId, 1L, Long::sum);
-            } else {
-                dupesByRunId.merge(runId, 1L, Long::sum);
-            }
+            insertedReadings.add(reading.toResponse());
+            savedByRunId.merge(runId, 1L, Long::sum);
         }
 
         return new BatchResult(insertedReadings, savedByRunId, dupesByRunId);

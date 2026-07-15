@@ -36,6 +36,7 @@
    *
    * @typedef {Object} SimulatorStatus
    * @property {boolean} [running]
+   * @property {boolean} [warming]
    * @property {boolean} [draining]
    * @property {number|null} [startedAt]
    * @property {string|null} [currentRunId]
@@ -45,6 +46,7 @@
    *
    * @typedef {Object} TesterState
    * @property {boolean} running
+   * @property {boolean} warming
    * @property {boolean} draining
    * @property {boolean} busy
    * @property {string} error
@@ -69,6 +71,7 @@
   /** @type {TesterState} */
   let tester = $state({
     running: false,
+    warming: false,
     draining: false,
     busy: false,
     error: '',
@@ -148,6 +151,7 @@
   /** @param {SimulatorStatus} data */
   function applySimulatorStatus(data = {}) {
     tester.running = Boolean(data.running);
+    tester.warming = Boolean(data.warming);
     tester.draining = Boolean(data.draining);
     tester.startedAt = data.startedAt ?? null;
     tester.currentRunId = data.currentRunId ?? null;
@@ -226,7 +230,7 @@
           <span class="eyebrow">experiment controls</span>
           <span class="status mono" class:on={tester.running}>
             <span class="pip" class:live={tester.running}></span>
-            {tester.running ? `RUNNING ${durationLabel(runAge)}` : tester.draining ? 'DRAINING' : 'IDLE'}
+            {tester.warming ? 'WARMING' : tester.running ? `RUNNING ${durationLabel(runAge)}` : tester.draining ? 'DRAINING' : 'IDLE'}
           </span>
         </div>
 

@@ -1,6 +1,8 @@
 package com.nodemetry.backend.run;
 
 import com.nodemetry.backend.node.NodeService;
+import com.nodemetry.backend.telemetry.SensorReadingRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -15,25 +17,39 @@ public class RunRegistry {
 
     private final TestRunRepository repository;
     private final NodeService nodeService;
+    private final SensorReadingRepository readingRepository;
+    private final long endGraceMs;
 
     private volatile String currentRunId;
 
-    // Per-run counters kept in memory so the single MQTT ingest thread can record
-    // a save/dupe with a cheap LongAdder increment instead of a DB round-trip per
-    // message. A scheduled task mirrors the running totals into the TestRun row.
+    // Per-run event counters kept in memory so the single MQTT ingest thread can
+    // record a save/dupe with a cheap LongAdder increment instead of a DB
+    // round-trip per message. The events are not the source of truth for the run
+    // totals: another ingest instance sharing the broker and database (e.g. the
+    // production backend during local dev) may win the insert race for a message
+    // and leave this instance counting a "duplicate" for a reading that was in
+    // fact stored. A scheduled task therefore reconciles the events against
+    // sensor_readings before mirroring totals into the TestRun row.
     private final Map<String, RunCounters> counters = new ConcurrentHashMap<>();
 
     private static final class RunCounters {
         final LongAdder saved = new LongAdder();
         final LongAdder dupes = new LongAdder();
-        volatile boolean ended;
+        volatile long endedAtMillis; // 0 while the run is active
         long lastFlushedSaved = -1;
         long lastFlushedDupes = -1;
     }
 
-    public RunRegistry(TestRunRepository repository, NodeService nodeService) {
+    public RunRegistry(
+            TestRunRepository repository,
+            NodeService nodeService,
+            SensorReadingRepository readingRepository,
+            @Value("${run.metrics.end-grace-ms:15000}") long endGraceMs
+    ) {
         this.repository = repository;
         this.nodeService = nodeService;
+        this.readingRepository = readingRepository;
+        this.endGraceMs = endGraceMs;
     }
 
     public synchronized TestRun startRun(StartRunRequest req) {
@@ -66,14 +82,18 @@ public class RunRegistry {
             if (req != null && req.totalReceived() != null) {
                 run.setTotalReceived(Math.max(0, req.totalReceived()));
             }
-            // Stamp the freshest in-memory counts onto the row we're saving, then
-            // freeze the run counters. Late readings may still be stored, but they
-            // should not move the run-history totals after the run has ended.
+            // Stamp DB-reconciled totals onto the row we're saving. The counters
+            // stay registered for a grace window so flushCounters can settle late
+            // batches (this instance's queue drain, other instances' in-flight
+            // inserts) into the final totals before evicting the run.
             RunCounters c = counters.get(runId);
+            run.setTotalSaved(readingRepository.countByRunId(runId));
             if (c != null) {
-                c.ended = true;
-                run.setTotalSaved(c.saved.sum());
-                run.setDuplicatesSkipped(c.dupes.sum());
+                c.endedAtMillis = System.currentTimeMillis();
+                long processed = c.saved.sum() + c.dupes.sum();
+                run.setDuplicatesSkipped(Math.max(0, processed - run.getTotalSaved()));
+                c.lastFlushedSaved = run.getTotalSaved();
+                c.lastFlushedDupes = run.getDuplicatesSkipped();
             }
             if (runId.equals(currentRunId)) {
                 currentRunId = null;
@@ -92,7 +112,7 @@ public class RunRegistry {
 
     public synchronized void recordSaved(String runId, long count) {
         RunCounters c = runId == null ? null : counters.get(runId);
-        if (c != null && !c.ended && count > 0) {
+        if (c != null && count > 0) {
             c.saved.add(count);
         }
     }
@@ -107,35 +127,40 @@ public class RunRegistry {
 
     public synchronized void recordDupe(String runId, long count) {
         RunCounters c = runId == null ? null : counters.get(runId);
-        if (c != null && !c.ended && count > 0) {
+        if (c != null && count > 0) {
             c.dupes.add(count);
         }
     }
 
-    // Mirror the in-memory counters into the DB roughly once a second so the
-    // per-run saved/dupe totals the UI reads stay fresh without a write per
-    // message. Only writes active runs whose totals moved; evicts ended runs once
-    // their final values have been stamped by endRun.
+    // Mirror DB-reconciled totals into the TestRun row roughly once a second so
+    // the per-run saved/dupe totals the UI reads stay fresh without a write per
+    // message. saved is what sensor_readings actually holds for the run; dupes is
+    // the local events that did not add a row, so an insert won by another
+    // instance cancels out instead of surfacing as a phantom duplicate. Ended
+    // runs keep reconciling for a grace window (late queue drains, other
+    // instances' in-flight batches), then get evicted.
     @Scheduled(fixedDelay = 1000)
     public void flushCounters() {
+        long now = System.currentTimeMillis();
         Iterator<Map.Entry<String, RunCounters>> it = counters.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<String, RunCounters> entry = it.next();
             String runId = entry.getKey();
             RunCounters c = entry.getValue();
-            if (c.ended) {
-                it.remove();
-                continue;
-            }
 
-            long saved = c.saved.sum();
-            long dupes = c.dupes.sum();
+            long saved = readingRepository.countByRunId(runId);
+            long processed = c.saved.sum() + c.dupes.sum();
+            long dupes = Math.max(0, processed - saved);
 
             boolean changed = saved != c.lastFlushedSaved || dupes != c.lastFlushedDupes;
             if (changed) {
                 repository.updateCounters(runId, saved, dupes);
                 c.lastFlushedSaved = saved;
                 c.lastFlushedDupes = dupes;
+            }
+
+            if (c.endedAtMillis != 0 && now - c.endedAtMillis >= endGraceMs) {
+                it.remove();
             }
         }
     }

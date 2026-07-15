@@ -19,18 +19,26 @@ const defaultOptions = {
 
 const API_BASE = process.env.PUBLIC_API_BASE || 'http://localhost:8080';
 const STOP_TIMEOUT_MS = 15000;
+const RUN_ID_TIMEOUT_MS = 5000;
+const WARMUP_READY_TIMEOUT_MS = 120000;
 
 let processHandle = null;
 let startedAt = null;
+let warming = false;
 let lastExit = null;
 let logTail = '';
 let currentOptions = { ...defaultOptions };
 let currentRunId = null;
+let registeredRunId = null;
 let endingRunId = null;
 let endPromise = null;
 
+function isChildRunning(child) {
+  return child !== null && child.exitCode === null && child.signalCode === null;
+}
+
 function isRunning() {
-  return processHandle !== null && processHandle.exitCode === null && processHandle.signalCode === null;
+  return isChildRunning(processHandle);
 }
 
 function appendLog(chunk) {
@@ -40,6 +48,7 @@ function appendLog(chunk) {
 function status() {
   return {
     running: isRunning(),
+    warming: warming && isRunning(),
     draining: Boolean(endingRunId),
     startedAt,
     lastExit,
@@ -115,9 +124,16 @@ function endRunPayload() {
 
 async function endCurrentRun() {
   if (endPromise) return endPromise;
-  if (!currentRunId) return null;
+  if (!registeredRunId) {
+    if (!isRunning()) {
+      currentRunId = null;
+      warming = false;
+      startedAt = null;
+    }
+    return null;
+  }
 
-  const runId = currentRunId;
+  const runId = registeredRunId;
   endingRunId = runId;
 
   endPromise = (async () => {
@@ -131,7 +147,10 @@ async function endCurrentRun() {
       console.warn('[simulator] failed to end run:', e.message);
     } finally {
       if (currentRunId === runId) currentRunId = null;
+      if (registeredRunId === runId) registeredRunId = null;
       if (endingRunId === runId) endingRunId = null;
+      warming = false;
+      startedAt = null;
       endPromise = null;
     }
   })();
@@ -181,7 +200,8 @@ function argsForOptions(options, runId) {
     '--duplicate-rate',
     String(options.duplicateRate),
     '--run-id',
-    runId
+    runId,
+    '--start-gate-stdin'
   ];
 
   if (options.shared) {
@@ -189,6 +209,161 @@ function argsForOptions(options, runId) {
   }
 
   return args;
+}
+
+function pctLabel(value) {
+  const pct = value * 100;
+  if (pct === 0) return '0%';
+  if (pct < 1) return `${pct.toFixed(2).replace(/\.?0+$/, '')}%`;
+  if (pct < 10) return `${pct.toFixed(1).replace(/\.?0+$/, '')}%`;
+  return `${Math.round(pct)}%`;
+}
+
+function runIdFromSimulator(python) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      python,
+      ['-c', 'import simulator; print(simulator.default_run_id())'],
+      {
+        cwd: simulatorDir,
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe']
+      }
+    );
+
+    let stdout = '';
+    let stderr = '';
+    const timeout = setTimeout(() => {
+      child.kill('SIGTERM');
+      reject(new Error('timed out waiting for simulator run id'));
+    }, RUN_ID_TIMEOUT_MS);
+
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.on('error', (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on('exit', (code, signal) => {
+      clearTimeout(timeout);
+      if (code !== 0) {
+        const detail = stderr.trim() || signal || `exit code ${code}`;
+        reject(new Error(detail));
+        return;
+      }
+
+      const runId = stdout.trim();
+      if (!runId) {
+        reject(new Error('simulator returned an empty run id'));
+        return;
+      }
+      resolve(runId);
+    });
+  });
+}
+
+function waitForWarmupReady(child) {
+  return new Promise((resolve, reject) => {
+    let buffer = '';
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('timed out waiting for simulator warmup'));
+    }, WARMUP_READY_TIMEOUT_MS);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      child.stdout.off('data', onData);
+      child.stderr.off('data', onData);
+      child.off('exit', onExit);
+      child.off('error', onError);
+    }
+
+    function onData(chunk) {
+      buffer = `${buffer}${chunk}`.slice(-2000);
+      const ready = buffer.match(/READY warmup_connected=(\d+)\/(\d+)/);
+      if (ready) {
+        cleanup();
+        resolve({ connected: Number(ready[1]), expected: Number(ready[2]) });
+        return;
+      }
+
+      const failed = buffer.match(/WARMUP_FAILED warmup_connected=(\d+)\/(\d+) failures=(\d+)/);
+      if (failed) {
+        cleanup();
+        reject(
+          new Error(
+            `simulator warmup failed: ${failed[1]}/${failed[2]} connections ready, ${failed[3]} failed`
+          )
+        );
+      }
+    }
+
+    function onExit(code, signal) {
+      cleanup();
+      reject(new Error(`simulator exited during warmup (${signal ?? `code ${code}`})`));
+    }
+
+    function onError(error) {
+      cleanup();
+      reject(error);
+    }
+
+    child.stdout.on('data', onData);
+    child.stderr.on('data', onData);
+    child.once('exit', onExit);
+    child.once('error', onError);
+  });
+}
+
+async function registerRun(runId, label) {
+  const res = await fetch(`${API_BASE}/api/v1/runs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      runId,
+      label,
+      qos: currentOptions.qos,
+      nodeCount: currentOptions.nodes,
+      intervalSec: currentOptions.interval,
+      duplicateRate: currentOptions.duplicateRate
+    })
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to register run (${res.status})`);
+  }
+}
+
+async function beginMeasurementAfterWarmup(child, runId, label) {
+  try {
+    await waitForWarmupReady(child);
+    if (processHandle !== child || !isChildRunning(child)) return;
+
+    await registerRun(runId, label);
+    registeredRunId = runId;
+    if (!warming || processHandle !== child || !isChildRunning(child)) {
+      await endCurrentRun();
+      return;
+    }
+
+    startedAt = Date.now();
+    warming = false;
+    child.stdin.write('start\n');
+  } catch (e) {
+    if (processHandle !== child || !warming) return;
+
+    appendLog(`warmup failed: ${e.message}\n`);
+    lastExit = { code: null, signal: null, at: Date.now(), error: e.message };
+    warming = false;
+    if (isChildRunning(child)) {
+      child.kill('SIGINT');
+    }
+  }
 }
 
 export async function POST({ request }) {
@@ -202,52 +377,36 @@ export async function POST({ request }) {
   const body = await request.json().catch(() => ({}));
   currentOptions = normalizeOptions(body);
 
-  // Generate the run id up front and hand it to the simulator so the run we
-  // register below and the runId stamped on every published reading match.
-  const runId = crypto.randomUUID();
+  const python = existsSync(venvPython) ? venvPython : 'python3';
 
-  const labelParts = [
-    `QoS ${currentOptions.qos}`,
-    `${currentOptions.nodes} nodes`,
-    `${currentOptions.interval}s interval`
-  ];
-  if (currentOptions.duration > 0) labelParts.push(`${currentOptions.duration}s duration`);
-  const label = labelParts.join(' · ');
-
-  // Register the run *before* spawning the simulator: the row must exist by the
-  // time the first reading lands, or backend per-run counters have no target.
-  // If registration fails, don't start an untracked load test.
+  // The simulator owns the run-id format. Ask it for the id before registering
+  // the backend row so counters have a target by the time telemetry starts.
+  let runId;
   try {
-    const res = await fetch(`${API_BASE}/api/v1/runs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        runId,
-        label,
-        qos: currentOptions.qos,
-        nodeCount: currentOptions.nodes,
-        intervalSec: currentOptions.interval,
-        duplicateRate: currentOptions.duplicateRate
-      })
-    });
-    if (!res.ok) {
-      return json({ error: `Failed to register run (${res.status})` }, { status: 502 });
-    }
+    runId = await runIdFromSimulator(python);
   } catch (e) {
-    return json({ error: `Failed to register run: ${e.message}` }, { status: 502 });
+    return json({ error: `Failed to get run id from simulator: ${e.message}` }, { status: 502 });
   }
 
-  currentRunId = runId;
+  const labelParts = [
+    currentOptions.shared ? `shared · ${currentOptions.connections} connections` : 'dedicated',
+    `${currentOptions.interval}s interval`,
+    `${pctLabel(currentOptions.duplicateRate)} duplicate rate`
+  ];
+  const label = labelParts.join(' · ');
 
-  const python = existsSync(venvPython) ? venvPython : 'python3';
+  currentRunId = runId;
+  registeredRunId = null;
+  warming = true;
+
   const child = spawn(python, argsForOptions(currentOptions, runId), {
     cwd: simulatorDir,
     env: process.env,
-    stdio: ['ignore', 'pipe', 'pipe']
+    stdio: ['pipe', 'pipe', 'pipe']
   });
 
   processHandle = child;
-  startedAt = Date.now();
+  startedAt = null;
   lastExit = null;
   logTail = '';
 
@@ -256,20 +415,24 @@ export async function POST({ request }) {
   child.stdout.on('data', appendLog);
   child.stderr.on('data', appendLog);
   child.on('exit', (code, signal) => {
-    lastExit = { code, signal, at: Date.now() };
+    lastExit = { code, signal, at: Date.now(), ...(lastExit?.error ? { error: lastExit.error } : {}) };
     if (processHandle === child) processHandle = null;
+    warming = false;
     void endCurrentRun();
   });
   child.on('error', (error) => {
     appendLog(`${error.message}\n`);
     lastExit = { code: null, signal: null, at: Date.now(), error: error.message };
     if (processHandle === child) processHandle = null;
-    // The process never started, so close the run we just registered instead of
-    // leaving it open (endedAt null) and blocking the next run's counters.
+    warming = false;
+    // If warmup had already registered the run, close it instead of leaving an
+    // open row (endedAt null) that blocks the next run's counters.
     void endCurrentRun();
   });
 
-  return json(status(), { status: 201 });
+  void beginMeasurementAfterWarmup(child, runId, label);
+
+  return json(status(), { status: 202 });
 }
 
 export async function DELETE() {
@@ -280,6 +443,7 @@ export async function DELETE() {
   }
 
   const child = processHandle;
+  warming = false;
   child.kill('SIGINT');
   const exited = await waitForExit(child, STOP_TIMEOUT_MS);
   if (exited) await endCurrentRun();

@@ -88,6 +88,12 @@ control and snapshot panels are hidden in production, and `/api/simulator` still
 returns **404** in any production build so nothing shippable can spawn simulator
 processes.
 
+Run-history metrics use a warmup window: the simulator connects all configured
+MQTT clients first, then the frontend registers the backend run and releases
+telemetry. That keeps connection ramp time out of `duration`, expected message
+count, delivery %, and throughput, so those metrics describe the measured steady
+load rather than startup connection delay.
+
 ## Project layout
 
 ```
