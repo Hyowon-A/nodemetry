@@ -115,18 +115,20 @@ WS    /ws   (STOMP)
       /topic/nodes/{nodeId}/latest   per-node latest reading
 ```
 
-Alert evaluation and ingestion metrics are derived **client-side** in the
-dashboard from the reading stream; there is no server-side alerts/metrics endpoint.
+Ingestion metrics are tracked by the backend and exposed through
+`GET /api/v1/metrics/ingestion`; the dashboard polls that endpoint while also
+using live readings to keep recent throughput moving between refreshes.
 
 ## Deployment notes
 
-- **The API and WebSocket are currently unauthenticated** — `SecurityConfig`
-  permits every request. CORS limits browser origins but not direct
-  (`curl`/script) requests. Before exposing this on the public internet, put it
-  behind authentication, a private network, or a gateway/reverse-proxy password.
-- **The load tester is hidden in production.** The `/load-tester` page and its
-  `/api/simulator` control endpoint (which spawns the Python simulator) return
-  404 in any built/deployed frontend; they exist only under `npm run dev`.
-- The backend `Dockerfile` builds a runnable jar. It currently runs as root and
-  Hibernate `ddl-auto` is `update` — prefer a non-root user and
-  `validate` + managed migrations for production.
+- **The API and WebSocket are currently unauthenticated.** Production runs the
+  HTTP API in read-only mode by default, but REST reads and WebSocket access are
+  still public. CORS limits browser origins but not direct (`curl`/script)
+  requests; use authentication, a private network, or a gateway/reverse-proxy
+  password before exposing sensitive data.
+- **Simulator controls are hidden in production.** The `/load-tester` page stays
+  available as a read-only view, while `/api/simulator` returns 404 in any
+  built/deployed frontend so nothing shippable can spawn simulator processes.
+- The backend `Dockerfile` builds a runnable jar and runs it as a non-root user.
+  Hibernate `ddl-auto` is still `update` — prefer `validate` + managed
+  migrations for production.
