@@ -158,6 +158,21 @@ class TelemetryServiceTest {
         verifyNoInteractions(readingRepository, nodeRepository);
     }
 
+    @Test
+    void processTelemetryRejectsUnsafeNodeId() {
+        TelemetryMessage message = message(
+                "message-001",
+                "node/../../secret",
+                "firmware-1.0.0"
+        );
+
+        assertThatThrownBy(() -> service.processTelemetry(message))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("nodeId contains unsupported characters or is too long");
+
+        verifyNoInteractions(readingRepository, nodeRepository);
+    }
+
     @ParameterizedTest
     @NullAndEmptySource
     @ValueSource(strings = {" ", "\t"})

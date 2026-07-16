@@ -10,9 +10,11 @@
 	</parent>
 	<groupId>com.nodemetry</groupId>
 	<artifactId>backend</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
-	<name/>
-	<description/>
+	<version>1.0.0</version>
+	<name>Nodemetry Backend</name>
+	<description>
+		MQTT telemetry ingestion backend for physical and virtual IoT nodes
+	</description>
 	<url/>
 	<licenses>
 		<license/>
@@ -82,11 +84,6 @@
 		<dependency>
 			<groupId>com.fasterxml.jackson.core</groupId>
 			<artifactId>jackson-databind</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>me.paulschwarz</groupId>
-			<artifactId>spring-dotenv</artifactId>
-			<version>4.0.0</version>
 		</dependency>
 		<dependency>
 			<groupId>io.github.cdimascio</groupId>

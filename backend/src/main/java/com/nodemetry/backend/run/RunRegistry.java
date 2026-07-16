@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.LongAdder;
 @Component
 public class RunRegistry {
 
-    private final TestRunRepository repository;
+    private final VirtualNodeRunRepository repository;
     private final NodeService nodeService;
     private final SensorReadingRepository readingRepository;
     private final long endGraceMs;
@@ -29,7 +29,7 @@ public class RunRegistry {
     // production backend during local dev) may win the insert race for a message
     // and leave this instance counting a "duplicate" for a reading that was in
     // fact stored. A scheduled task therefore reconciles the events against
-    // sensor_readings before mirroring totals into the TestRun row.
+    // sensor_readings before mirroring totals into the VirtualNodeRun row.
     private final Map<String, RunCounters> counters = new ConcurrentHashMap<>();
 
     private static final class RunCounters {
@@ -41,7 +41,7 @@ public class RunRegistry {
     }
 
     public RunRegistry(
-            TestRunRepository repository,
+            VirtualNodeRunRepository repository,
             NodeService nodeService,
             SensorReadingRepository readingRepository,
             @Value("${run.metrics.end-grace-ms:15000}") long endGraceMs
@@ -52,10 +52,10 @@ public class RunRegistry {
         this.endGraceMs = endGraceMs;
     }
 
-    public synchronized TestRun startRun(StartRunRequest req) {
+    public synchronized VirtualNodeRun startRun(StartRunRequest req) {
         nodeService.markAllKnownNodesOffline();
 
-        TestRun run = new TestRun();
+        VirtualNodeRun run = new VirtualNodeRun();
         run.setRunId(req.runId());
         run.setLabel(req.label());
         run.setStartedAt(Instant.now());
@@ -63,17 +63,17 @@ public class RunRegistry {
         run.setNodeCount(req.nodeCount());
         run.setIntervalSec(req.intervalSec());
         run.setDuplicateRate(req.duplicateRate());
-        TestRun savedRun = repository.save(run);
+        VirtualNodeRun savedRun = repository.save(run);
         counters.put(req.runId(), new RunCounters());
         currentRunId = req.runId();
         return savedRun;
     }
 
-    public synchronized TestRun endRun(String runId) {
+    public synchronized VirtualNodeRun endRun(String runId) {
         return endRun(runId, null);
     }
 
-    public synchronized TestRun endRun(String runId, EndRunRequest req) {
+    public synchronized VirtualNodeRun endRun(String runId, EndRunRequest req) {
         return repository.findByRunId(runId).map(run -> {
             Instant endedAt = req != null && req.endedAtEpochMs() != null
                     ? Instant.ofEpochMilli(req.endedAtEpochMs())
@@ -132,7 +132,7 @@ public class RunRegistry {
         }
     }
 
-    // Mirror DB-reconciled totals into the TestRun row roughly once a second so
+    // Mirror DB-reconciled totals into the VirtualNodeRun row roughly once a second so
     // the per-run saved/dupe totals the UI reads stay fresh without a write per
     // message. saved is what sensor_readings actually holds for the run; dupes is
     // the local events that did not add a row, so an insert won by another

@@ -12,6 +12,8 @@ import java.util.Locale;
 @Service
 public class MqttMessageHandler {
 
+    private static final int LOG_VALUE_LIMIT = 160;
+
     private record StatusMessage(String status) {}
 
     // Ignore unknown/legacy JSON keys so producers sending extra fields (or fields since
@@ -44,16 +46,18 @@ public class MqttMessageHandler {
             message = objectMapper.readValue(payload, TelemetryMessage.class);
         } catch (Exception e) {
             System.err.println("Failed to parse telemetry message");
-            System.err.println("Topic: " + topic);
-            System.err.println("Payload: " + payload);
+            System.err.println("Topic: " + safeLogValue(topic));
+            System.err.println("Payload chars: " + (payload == null ? 0 : payload.length()));
             System.err.println("Error: " + e.getMessage());
             return;
         }
 
         if (!batchIngestService.enqueue(message)) {
             System.err.println("Telemetry ingest queue full; dropped message");
-            System.err.println("Topic: " + topic);
-            System.err.println("Payload: " + payload);
+            System.err.println("Topic: " + safeLogValue(topic));
+            System.err.println("Message: messageId=" + safeLogValue(message.messageId())
+                    + " nodeId=" + safeLogValue(message.nodeId())
+                    + " runId=" + safeLogValue(message.runId()));
         }
     }
 
@@ -70,7 +74,7 @@ public class MqttMessageHandler {
         try {
             String[] parts = topic.split("/");
             if (parts.length < 3) {
-                System.err.println("Malformed status topic: " + topic);
+                System.err.println("Malformed status topic: " + safeLogValue(topic));
                 return;
             }
 
@@ -78,7 +82,7 @@ public class MqttMessageHandler {
             StatusMessage statusMessage = objectMapper.readValue(payload, StatusMessage.class);
             String status = normalizeStatus(statusMessage.status());
             if (status == null) {
-                System.err.println("Missing or invalid status payload on topic: " + topic);
+                System.err.println("Missing or invalid status payload on topic: " + safeLogValue(topic));
                 return;
             }
 
@@ -87,7 +91,7 @@ public class MqttMessageHandler {
             if (updated) System.out.println("Status updated for node: " + nodeId);
 
         } catch (Exception e) {
-            System.err.println("Failed to process status message on topic: " + topic);
+            System.err.println("Failed to process status message on topic: " + safeLogValue(topic));
             System.err.println("Error: " + e.getMessage());
         }
     }
@@ -99,5 +103,15 @@ public class MqttMessageHandler {
 
         String normalized = status.trim().toLowerCase(Locale.ROOT);
         return ("online".equals(normalized) || "offline".equals(normalized)) ? normalized : null;
+    }
+
+    private String safeLogValue(String value) {
+        if (value == null) {
+            return "";
+        }
+        String sanitized = value.replaceAll("[\\r\\n\\t\\p{Cntrl}]", "?");
+        return sanitized.length() <= LOG_VALUE_LIMIT
+                ? sanitized
+                : sanitized.substring(0, LOG_VALUE_LIMIT) + "...";
     }
 }
