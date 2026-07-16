@@ -28,10 +28,10 @@ import {
   setNodes,
   setConnected,
   setLocalPipeline,
-  setAckHandler,
   emptyHistory,
   emptyLatest,
   replaceNodeHistory,
+  applyIngestionMetrics,
   isVirtualNodeId,
   selectedDashboardNode,
   selectedRunIdForNode
@@ -40,9 +40,14 @@ import {
 const API = (env.PUBLIC_API_BASE || 'http://localhost:8080').replace(/\/$/, '');
 const WS_URL = env.PUBLIC_WS_URL || API.replace(/^http/, 'ws') + '/ws';
 const INCLUDE_VNODES = env.PUBLIC_INCLUDE_VNODES === 'true';
+const LOG_VALUE_LIMIT = 160;
 
 /** Normalise a timestamp (ISO string or epoch) to epoch ms. */
 const ms = (t) => (typeof t === 'number' ? t : t ? Date.parse(t) : Date.now());
+
+function safeLogValue(value) {
+  return String(value ?? '').replace(/[\r\n\t\p{Cc}]/gu, '?').slice(0, LOG_VALUE_LIMIT);
+}
 
 async function getJSON(path) {
   const res = await fetch(`${API}${path}`);
@@ -101,6 +106,24 @@ export async function loadNodeHistory(nodeId, runId = null) {
   return historyRows.length;
 }
 
+/**
+ * Pull a node's persisted ingestion metrics (backend physical_node_runs).
+ * Scoped to runId when given; otherwise the node's most recent run (the
+ * endpoint returns rows newest-first). The backend only tracks physical
+ * nodes, so vnode ids are skipped.
+ */
+export async function refreshIngestionMetrics(nodeId, runId = null) {
+  if (!nodeId || isVirtualNodeId(nodeId)) return;
+  const params = new URLSearchParams({ nodeId });
+  if (runId) params.set('runId', runId);
+  try {
+    const rows = await getJSON(`/api/v1/metrics/ingestion?${params}`);
+    applyIngestionMetrics(nodeId, rows[0] ?? null, { preferPersistedThroughput: !!runId });
+  } catch (e) {
+    console.warn(`[nodemetry] ingestion metrics fetch failed for ${nodeId}:`, e.message);
+  }
+}
+
 async function seedHistory(node) {
   try {
     const count = await loadNodeHistory(node.nodeId);
@@ -135,7 +158,6 @@ let clockTimer = null;
 export async function connectLive() {
   alive = true;
   setLocalPipeline(false); // backend owns persistence; we just mirror readings
-  setAckHandler(null);
 
   store.startedAt = Date.now();
   clearInterval(clockTimer);
@@ -191,7 +213,7 @@ function openStomp() {
             firmwareVersion: r.firmwareVersion
           });
         } catch (error) {
-          console.error('[nodemetry] invalid STOMP reading:', error, message.body);
+          console.error('[nodemetry] invalid STOMP reading:', error, safeLogValue(message.body));
         }
       });
 
@@ -200,7 +222,7 @@ function openStomp() {
           const { nodeId, status } = JSON.parse(message.body);
           applyStatus(nodeId, status);
         } catch (error) {
-          console.error('[nodemetry] invalid status message:', error, message.body);
+          console.error('[nodemetry] invalid status message:', error, safeLogValue(message.body));
         }
       });
     },
@@ -208,7 +230,7 @@ function openStomp() {
     onWebSocketError: (event) =>
       console.error('[nodemetry] WebSocket connection failed:', WS_URL, event),
     onStompError: (frame) =>
-      console.error('[nodemetry] STOMP error:', frame.headers?.message, frame.body)
+      console.error('[nodemetry] STOMP error:', safeLogValue(frame.headers?.message), safeLogValue(frame.body))
   });
 
   stomp = client;

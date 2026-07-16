@@ -5,7 +5,7 @@ connects to the Spring Boot backend, bootstraps the fleet + recent history over
 REST, and streams live readings over STOMP. It presents the fleet as an
 instrument console: each sensor metric is its own oscilloscope channel, with
 live readouts, a node status table, time-series charts, raw-vs-filtered
-temperature/humidity traces, threshold alerts, and ingestion metrics.
+temperature/humidity traces, and ingestion metrics.
 
 ## Run it
 
@@ -49,13 +49,13 @@ The live integration lives in **`src/lib/live.svelte.js`**:
 Incoming live readings and node-status events flow through the
 `applyReading()` / `applyStatus()` helpers in `src/lib/telemetry.svelte.js`.
 `applyReading()` handles `messageId` de-duplication, history windowing, and
-client-side threshold alert evaluation.
+live ingestion metric updates.
 
 Reading fields consumed by the UI (all optional except `nodeId`):
 
 ```
 messageId, nodeId, runId, measuredAt / receivedAt,
-temperature, humidity, co2, light, battery, rssi, firmwareVersion
+temperature, humidity, light, battery, rssi, firmwareVersion
 ```
 
 ## What's on screen
@@ -63,13 +63,10 @@ temperature, humidity, co2, light, battery, rssi, firmwareVersion
 - **Top bar** — broker subscription, backend connection state, node uptime,
   clock, and context navigation between the dashboard and load tester.
 - **Overview strip** — active nodes versus total nodes.
-- **Charts** — temperature, humidity, CO₂, and raw light for the selected node,
+- **Charts** — temperature, humidity, and raw light for the selected node,
   with raw-vs-filtered traces for temperature and humidity.
-- **Alerts** — threshold and offline alerts (CO₂ > 1000 ppm, temp > 28 °C,
-  humidity < 35 %, battery < 20 %, RSSI < −75 dBm, light < 50 lux, node offline)
-  with an acknowledge action.
 - **Ingestion metrics** — messages received/saved, duplicates skipped, throughput,
-  active/offline counts, alerts created, avg processing time.
+  node status, history size, and avg processing time.
 - **Node fleet table** — status, last seen, RSSI signal bars, battery cell, latest
   readings, firmware. **Click a row to drive the charts.**
 - **Node details / run selector** — per-node history, with a selector to scope the
@@ -109,7 +106,6 @@ src/
 │       ├── TopBar.svelte
 │       ├── OverviewStrip.svelte
 │       ├── SignalChart.svelte      reusable scope chart
-│       ├── AlertsPanel.svelte
 │       ├── IngestionMetrics.svelte
 │       ├── NodeTable.svelte
 │       ├── NodeDetails.svelte
