@@ -29,6 +29,7 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> {
+                    auth.requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs", "/v3/api-docs/**").permitAll();
                     if (httpApiProperties.isReadOnly()) {
                         auth.requestMatchers(HttpMethod.GET, "/api/**").permitAll();
                         auth.requestMatchers(HttpMethod.HEAD, "/api/**").permitAll();

@@ -1,130 +1,127 @@
-# Nodemetry — Live Signal Monitor (dashboard)
+# Nodemetry Frontend
 
-The SvelteKit dashboard for the **Nodemetry** MQTT telemetry platform. It
-connects to the Spring Boot backend, bootstraps the fleet + recent history over
-REST, and streams live readings over STOMP. It presents the fleet as an
-instrument console: each sensor metric is its own oscilloscope channel, with
-live readouts, a node status table, time-series charts, raw-vs-filtered
-temperature/humidity traces, and ingestion metrics.
+SvelteKit dashboard for the Nodemetry MQTT telemetry platform. It bootstraps
+node state and recent history over REST, streams live readings over STOMP, and
+renders physical-node telemetry, node health, run history, and ingestion metrics.
 
-## Run it
+## Requirements
+
+- Node 20, pinned in `.nvmrc`
+- npm
+- Running backend API for live data
+
+## Install, Run, and Build
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+npm run dev
 ```
+
+The dev server runs at `http://localhost:5173`.
+
+Production build:
 
 ```bash
-npm run build    # production build
-npm run preview  # preview the production build
+npm run build
+npm run preview
 ```
 
-Requires Node 20 (pinned in `.nvmrc`).
+## Environment Variables
 
-## Live backend
+Browser-facing values go in `frontend/.env`:
 
-The dashboard expects the backend to be reachable. Configure the browser-facing
-REST and WebSocket endpoints in `.env`:
-
-```
+```text
 PUBLIC_API_BASE=http://localhost:8080
 PUBLIC_WS_URL=ws://localhost:8080/ws
-# Optional dev-only load-test node visibility:
-# PUBLIC_INCLUDE_VNODES=true
+PUBLIC_INCLUDE_VNODES=true
 ```
 
-> `PUBLIC_`-prefixed variables are bundled into the browser build — keep secrets
-> out of them.
+`PUBLIC_INCLUDE_VNODES` is optional and mainly useful in development. Do not put
+secrets in `PUBLIC_` variables because they are bundled into browser code.
 
-The live integration lives in **`src/lib/live.svelte.js`**:
+## Main Routes
 
-1. **REST bootstrap** — `GET /api/v1/nodes`, filtering out `vnode-*` records by
-   default, then `GET /api/v1/nodes/{id}/readings` for the selected dashboard
-   node. Set `PUBLIC_INCLUDE_VNODES=true` in development to include load-test
-   virtual nodes in the live store.
-2. **Live stream** — STOMP over a raw WebSocket via `@stomp/stompjs` (the backend
-   speaks STOMP without SockJS), subscribing to `/topic/readings` and
-   `/topic/nodes/status`.
-
-Incoming live readings and node-status events flow through the
-`applyReading()` / `applyStatus()` helpers in `src/lib/telemetry.svelte.js`.
-`applyReading()` handles `messageId` de-duplication, history windowing, and
-live ingestion metric updates.
-
-Reading fields consumed by the UI (all optional except `nodeId`):
-
-```
-messageId, nodeId, runId, measuredAt / receivedAt,
-temperature, humidity, light, battery, rssi, firmwareVersion
+```text
+/              Physical-node dashboard
+/load-tester   Load-test topology and run results
+/api/simulator Dev-only simulator control endpoint
 ```
 
-## What's on screen
+`/api/simulator` returns 404 in production builds.
 
-- **Top bar** — broker subscription, backend connection state, node uptime,
-  clock, and context navigation between the dashboard and load tester.
-- **Overview strip** — active nodes versus total nodes.
-- **Charts** — temperature, humidity, and raw light for the selected node,
-  with raw-vs-filtered traces for temperature and humidity.
-- **Ingestion metrics** — messages received/saved, duplicates skipped, throughput,
-  node status, history size, and avg processing time.
-- **Node fleet table** — status, last seen, RSSI signal bars, battery cell, latest
-  readings, firmware. **Click a row to drive the charts.**
-- **Node details / run selector** — per-node history, with a selector to scope the
-  charts to a specific load-test run.
+## Physical-Node Dashboard Behavior
 
-## Load tester
+The dashboard filters `vnode-*` load-test nodes out of the main live view by
+default. It shows:
 
-`/load-tester` shows the virtual-node topology and run history. The page is
-available in production as a read-only view.
+- node fleet status and latest readings
+- selected-node details
+- temperature and humidity raw-vs-filtered charts
+- light chart
+- per-node run selector
+- persisted ingestion metrics from the backend
 
-In development, the page also shows experiment controls and a snapshot panel.
-The controls drive the Python simulator in `../simulator` through
-`src/routes/api/simulator/+server.js` to generate load against the backend and
-record test runs (start/stop, node count, interval, QoS, duplicate rate). The
-control and snapshot panels are hidden in production, and `/api/simulator` still
-returns **404** in any production build so nothing shippable can spawn simulator
-processes.
+When a run is selected for a node, charts use the run-scoped history endpoint.
 
-Run-history metrics use a warmup window: the simulator connects all configured
-MQTT clients first, then the frontend registers the backend run and releases
-telemetry. That keeps connection ramp time out of `duration`, expected message
-count, delivery %, and throughput, so those metrics describe the measured steady
-load rather than startup connection delay.
+## Load-Test Results Page Behavior
 
-## Project layout
+`/load-tester` is available in production as a read-only view. It shows virtual
+node topology and run history.
 
-```
+In development, the page also shows simulator controls. Those controls call
+`/api/simulator`, which spawns the Python simulator from `../simulator`, waits
+for MQTT warmup, registers a backend run, then releases telemetry. This keeps
+connection warmup out of measured run duration.
+
+## WebSocket/STOMP Integration
+
+The live integration lives in `src/lib/live.svelte.js`.
+
+Startup flow:
+
+1. Fetch `GET /api/v1/nodes`.
+2. Fetch recent readings for the selected node.
+3. Connect to STOMP at `PUBLIC_WS_URL`.
+4. Subscribe to:
+   - `/topic/readings`
+   - `/topic/nodes/status`
+   - `/topic/nodes/{nodeId}/latest`
+
+Incoming messages update the reactive state in `src/lib/telemetry.svelte.js`.
+
+## Recorded and Demo Data Behavior
+
+The frontend contains a local mock pipeline used when the live backend is not
+driving the store. In normal operation `connectLive()` disables that local
+pipeline and treats the backend as the source of truth. The load-test page can
+display persisted run results from the backend even when simulator controls are
+not available.
+
+## Production Deployment Notes
+
+- Set `PUBLIC_API_BASE` to the deployed backend HTTP base URL.
+- Set `PUBLIC_WS_URL` to the deployed backend WebSocket URL.
+- Choose and configure an explicit SvelteKit adapter if `adapter-auto` cannot
+  detect the deployment platform.
+- Keep `/api/simulator` production-disabled; it is intentionally dev-only.
+- The backend production HTTP API is read-only by default, so deployed frontend
+  code should not rely on simulator start/stop writes.
+
+## Project Layout
+
+```text
 src/
-├── app.html                    fonts + shell
-├── app.css                     theme tokens, scope-grid atmosphere
+├── app.html
+├── app.css
 ├── lib/
-│   ├── telemetry.svelte.js     ← reactive dashboard state + apply* helpers
-│   ├── live.svelte.js          ← backend REST bootstrap + STOMP stream
-│   ├── runs.svelte.js          load-test run state
-│   ├── format.js               time / number helpers
+│   ├── telemetry.svelte.js
+│   ├── live.svelte.js
+│   ├── runs.svelte.js
+│   ├── format.js
 │   └── components/
-│       ├── TopBar.svelte
-│       ├── OverviewStrip.svelte
-│       ├── SignalChart.svelte      reusable scope chart
-│       ├── IngestionMetrics.svelte
-│       ├── NodeTable.svelte
-│       ├── NodeDetails.svelte
-│       ├── NodeRunSelector.svelte
-│       ├── RunsPanel.svelte
-│       └── VNodeTopology.svelte
 └── routes/
-    ├── +layout.svelte          starts the backend connection
-    ├── +page.svelte            dashboard composition
-    ├── load-tester/
-    │   └── +page.svelte        read-only prod view + dev simulator controls
-    └── api/
-        └── simulator/
-            └── +server.js      spawns/stops the simulator (dev only)
+    ├── +layout.svelte
+    ├── +page.svelte
+    ├── load-tester/+page.svelte
+    └── api/simulator/+server.js
 ```
-
-## Notes
-
-- Built with Svelte 5 (runes) + SvelteKit 2. No charting dependency — the charts
-  are hand-rolled SVG so they stay portable and on-theme.
-- Respects `prefers-reduced-motion`; tables and controls are keyboard accessible.
-- Fonts: IBM Plex Mono (readouts/labels) + IBM Plex Sans (body), from Google Fonts.
