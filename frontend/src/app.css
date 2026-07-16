@@ -21,7 +21,6 @@
   /* signal channels (functional color-coding, like scope probes) */
   --ch-temp: #ff9d4d;   /* heat   */
   --ch-humid: #34d3de;  /* water  */
-  --ch-co2: #b483e0;    /* violet */
   --ch-light: #f5c542;  /* golden yellow */
   --ch-rssi: #57e08a;   /* signal */
 

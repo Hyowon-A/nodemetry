@@ -1,17 +1,38 @@
 <script>
-  import { store, selectedDashboardNode } from '$lib/telemetry.svelte.js';
+  import {
+    selectedDashboardNode,
+    selectedDashboardRunId,
+    isLivePipeline
+  } from '$lib/telemetry.svelte.js';
+  import { refreshIngestionMetrics } from '$lib/live.svelte.js';
   import { num } from '$lib/format.js';
 
+  const REFRESH_MS = 5000;
+
   const node = $derived(selectedDashboardNode());
+  const runId = $derived(selectedDashboardRunId());
   const metrics = $derived(node?.ingestion ?? {});
-  const activeAlerts = $derived(
-    node ? store.alerts.filter((alert) => !alert.acknowledged && alert.nodeId === node.nodeId).length : 0
-  );
+  // Live view gates throughput on recent traffic; a run-scoped view shows the
+  // persisted run-average instead of forcing a historic run to read 0.
   const throughput = $derived(
-    node?.ingestion?.lastMessageAt && store.now - node.ingestion.lastMessageAt <= 5000
-      ? node.ingestion.throughput
-      : 0
+    runId
+      ? (metrics.throughput ?? 0)
+      : node?.ingestion?.lastMessageAt && store.now - node.ingestion.lastMessageAt <= 5000
+        ? node.ingestion.throughput
+        : 0
   );
+
+  // Server truth for the counters: refresh on node/run change, then poll.
+  // Skipped for the mock feed, which owns the counters itself.
+  $effect(() => {
+    const nodeId = node?.nodeId;
+    const selectedRun = runId;
+    if (!nodeId || !isLivePipeline()) return;
+
+    refreshIngestionMetrics(nodeId, selectedRun);
+    const timer = setInterval(() => refreshIngestionMetrics(nodeId, selectedRun), REFRESH_MS);
+    return () => clearInterval(timer);
+  });
   const items = $derived([
     { k: 'received', v: (metrics.messagesReceived ?? 0).toLocaleString() },
     { k: 'saved', v: (metrics.messagesSaved ?? 0).toLocaleString() },
@@ -23,7 +44,6 @@
     { k: 'throughput', v: num(throughput, 1), unit: 'msg/s', accent: throughput > 0 },
     { k: 'status', v: node?.status ?? 'none', accent: node?.status === 'online', warn: node?.status === 'offline' },
     { k: 'history', v: (node?.history?.t.length ?? 0).toLocaleString() },
-    { k: 'alerts', v: activeAlerts, warn: activeAlerts > 0 },
     { k: 'avg proc', v: num(metrics.avgProcessingMs ?? 0, 1), unit: 'ms' }
   ]);
 </script>

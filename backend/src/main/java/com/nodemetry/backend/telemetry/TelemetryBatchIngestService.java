@@ -1,5 +1,7 @@
 package com.nodemetry.backend.telemetry;
 
+import com.nodemetry.backend.run.PhysicalNodeRunRegistry;
+import com.nodemetry.backend.run.PhysicalNodeRunRegistry.NodeRunKey;
 import com.nodemetry.backend.run.RunRegistry;
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,6 +32,7 @@ public class TelemetryBatchIngestService {
     private final TransactionTemplate transactionTemplate;
     private final SimpMessagingTemplate messagingTemplate;
     private final RunRegistry runRegistry;
+    private final PhysicalNodeRunRegistry physicalNodeRunRegistry;
     private final LongAdder dropped = new LongAdder();
     private final LongAdder invalid = new LongAdder();
 
@@ -38,6 +41,7 @@ public class TelemetryBatchIngestService {
             TransactionTemplate transactionTemplate,
             SimpMessagingTemplate messagingTemplate,
             RunRegistry runRegistry,
+            PhysicalNodeRunRegistry physicalNodeRunRegistry,
             @Value("${telemetry.ingest.queue-capacity:50000}") int queueCapacity,
             @Value("${telemetry.ingest.batch-size:500}") int batchSize
     ) {
@@ -45,6 +49,7 @@ public class TelemetryBatchIngestService {
         this.transactionTemplate = transactionTemplate;
         this.messagingTemplate = messagingTemplate;
         this.runRegistry = runRegistry;
+        this.physicalNodeRunRegistry = physicalNodeRunRegistry;
         this.queue = new ArrayBlockingQueue<>(Math.max(1, queueCapacity));
         this.batchSize = Math.max(1, batchSize);
     }
@@ -81,9 +86,11 @@ public class TelemetryBatchIngestService {
             return 0;
         }
 
+        long startNanos = System.nanoTime();
         BatchResult result = ingest(batch);
+        double perMessageMs = (System.nanoTime() - startNanos) / 1_000_000.0 / batch.size();
         publish(result.insertedReadings());
-        recordRunCounters(result.savedByRunId(), result.dupesByRunId());
+        recordRunCounters(result, perMessageMs);
         return batch.size();
     }
 
@@ -97,6 +104,7 @@ public class TelemetryBatchIngestService {
     BatchResult ingest(List<TelemetryMessage> rawBatch) {
         Map<String, QueuedReading> uniqueByMessageId = new LinkedHashMap<>();
         Map<String, Long> dupesByRunId = new LinkedHashMap<>();
+        Map<NodeRunKey, Long> dupesByRunNode = new LinkedHashMap<>();
 
         for (TelemetryMessage message : rawBatch) {
             if (isValid(message)) {
@@ -104,6 +112,7 @@ public class TelemetryBatchIngestService {
                 QueuedReading reading = new QueuedReading(message, now, now);
                 if (uniqueByMessageId.putIfAbsent(message.messageId(), reading) != null) {
                     dupesByRunId.merge(message.runId(), 1L, Long::sum);
+                    dupesByRunNode.merge(new NodeRunKey(message.runId(), message.nodeId()), 1L, Long::sum);
                 }
             } else {
                 invalid.increment();
@@ -112,18 +121,18 @@ public class TelemetryBatchIngestService {
 
         List<QueuedReading> readings = new ArrayList<>(uniqueByMessageId.values());
         if (readings.isEmpty()) {
-            return new BatchResult(List.of(), Map.of(), dupesByRunId);
+            return new BatchResult(List.of(), Map.of(), dupesByRunId, Map.of(), dupesByRunNode);
         }
 
         return transactionTemplate.execute(status -> {
-            List<QueuedReading> newReadings = excludeExistingReadings(readings, dupesByRunId);
+            List<QueuedReading> newReadings = excludeExistingReadings(readings, dupesByRunId, dupesByRunNode);
             if (newReadings.isEmpty()) {
-                return new BatchResult(List.of(), Map.of(), dupesByRunId);
+                return new BatchResult(List.of(), Map.of(), dupesByRunId, Map.of(), dupesByRunNode);
             }
 
             upsertNodes(newReadings);
             insertReadings(newReadings);
-            return summarizeInserted(newReadings, dupesByRunId);
+            return summarizeInserted(newReadings, dupesByRunId, dupesByRunNode);
         });
     }
 
@@ -199,7 +208,8 @@ public class TelemetryBatchIngestService {
 
     private List<QueuedReading> excludeExistingReadings(
             List<QueuedReading> readings,
-            Map<String, Long> dupesByRunId
+            Map<String, Long> dupesByRunId,
+            Map<NodeRunKey, Long> dupesByRunNode
     ) {
         Set<String> existingMessageIds = existingMessageIds(readings);
         if (existingMessageIds.isEmpty()) {
@@ -208,9 +218,10 @@ public class TelemetryBatchIngestService {
 
         List<QueuedReading> newReadings = new ArrayList<>();
         for (QueuedReading reading : readings) {
-            String messageId = reading.message().messageId();
-            if (existingMessageIds.contains(messageId)) {
-                dupesByRunId.merge(reading.message().runId(), 1L, Long::sum);
+            TelemetryMessage message = reading.message();
+            if (existingMessageIds.contains(message.messageId())) {
+                dupesByRunId.merge(message.runId(), 1L, Long::sum);
+                dupesByRunNode.merge(new NodeRunKey(message.runId(), message.nodeId()), 1L, Long::sum);
             } else {
                 newReadings.add(reading);
             }
@@ -239,18 +250,21 @@ public class TelemetryBatchIngestService {
 
     private BatchResult summarizeInserted(
             List<QueuedReading> readings,
-            Map<String, Long> dupesByRunId
+            Map<String, Long> dupesByRunId,
+            Map<NodeRunKey, Long> dupesByRunNode
     ) {
         List<SensorReadingResponse> insertedReadings = new ArrayList<>();
         Map<String, Long> savedByRunId = new LinkedHashMap<>();
+        Map<NodeRunKey, Long> savedByRunNode = new LinkedHashMap<>();
 
         for (QueuedReading reading : readings) {
-            String runId = reading.message().runId();
+            TelemetryMessage message = reading.message();
             insertedReadings.add(reading.toResponse());
-            savedByRunId.merge(runId, 1L, Long::sum);
+            savedByRunId.merge(message.runId(), 1L, Long::sum);
+            savedByRunNode.merge(new NodeRunKey(message.runId(), message.nodeId()), 1L, Long::sum);
         }
 
-        return new BatchResult(insertedReadings, savedByRunId, dupesByRunId);
+        return new BatchResult(insertedReadings, savedByRunId, dupesByRunId, savedByRunNode, dupesByRunNode);
     }
 
     private void publish(List<SensorReadingResponse> insertedReadings) {
@@ -267,21 +281,25 @@ public class TelemetryBatchIngestService {
         }
     }
 
-    private void recordRunCounters(Map<String, Long> savedByRunId, Map<String, Long> dupesByRunId) {
-        savedByRunId.forEach(runRegistry::recordSaved);
-        dupesByRunId.forEach(runRegistry::recordDupe);
+    private void recordRunCounters(BatchResult result, double perMessageMs) {
+        result.savedByRunId().forEach(runRegistry::recordSaved);
+        result.dupesByRunId().forEach(runRegistry::recordDupe);
+
+        Set<NodeRunKey> keys = new LinkedHashSet<>(result.savedByRunNode().keySet());
+        keys.addAll(result.dupesByRunNode().keySet());
+        for (NodeRunKey key : keys) {
+            physicalNodeRunRegistry.recordBatch(
+                    key.runId(),
+                    key.nodeId(),
+                    result.savedByRunNode().getOrDefault(key, 0L),
+                    result.dupesByRunNode().getOrDefault(key, 0L),
+                    perMessageMs
+            );
+        }
     }
 
     private boolean isValid(TelemetryMessage message) {
-        return message != null
-                && hasText(message.messageId())
-                && hasText(message.nodeId())
-                && hasText(message.runId())
-                && hasText(message.firmwareVersion());
-    }
-
-    private boolean hasText(String value) {
-        return value != null && !value.isBlank();
+        return TelemetryMessageValidator.isValid(message);
     }
 
     private record QueuedReading(
@@ -311,6 +329,8 @@ public class TelemetryBatchIngestService {
     record BatchResult(
             List<SensorReadingResponse> insertedReadings,
             Map<String, Long> savedByRunId,
-            Map<String, Long> dupesByRunId
+            Map<String, Long> dupesByRunId,
+            Map<NodeRunKey, Long> savedByRunNode,
+            Map<NodeRunKey, Long> dupesByRunNode
     ) {}
 }

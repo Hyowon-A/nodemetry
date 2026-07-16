@@ -10,6 +10,8 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "mqtt", name = "enabled", havingValue = "true")
 public class MqttSubscriber {
 
+    private static final int LOG_VALUE_LIMIT = 160;
+
     private final MqttProperties properties;
     private final MqttMessageHandler messageHandler;
     private MqttClient client;
@@ -62,8 +64,8 @@ public class MqttSubscriber {
                     } else if (topic.endsWith("/status")) {
                         messageHandler.handleStatus(topic, payload, message.isRetained());
                     } else {
-                        System.out.println("Unknown topic: " + topic);
-                        System.out.println(payload);
+                        System.out.println("Unknown topic: " + safeLogValue(topic));
+                        System.out.println("Payload chars: " + payload.length());
                     }
                 }
 
@@ -98,5 +100,15 @@ public class MqttSubscriber {
         } catch (MqttException e) {
             System.err.println("Failed to disconnect MQTT client: " + e.getMessage());
         }
+    }
+
+    private String safeLogValue(String value) {
+        if (value == null) {
+            return "";
+        }
+        String sanitized = value.replaceAll("[\\r\\n\\t\\p{Cntrl}]", "?");
+        return sanitized.length() <= LOG_VALUE_LIMIT
+                ? sanitized
+                : sanitized.substring(0, LOG_VALUE_LIMIT) + "...";
     }
 }

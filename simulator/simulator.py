@@ -31,7 +31,6 @@ import email.utils
 import json
 import os
 import random
-import secrets
 import signal
 import ssl
 import sys
@@ -173,12 +172,8 @@ def format_run_id_from_time_tuple(time_tuple):
     return time.strftime("%Y%m%dT%H%M%SZ", time_tuple)
 
 
-def unique_run_id(timestamp):
-    return f"{timestamp}-{secrets.token_hex(4)}"
-
-
 def local_utc_run_id():
-    return unique_run_id(format_run_id_from_time_tuple(time.gmtime()))
+    return format_run_id_from_time_tuple(time.gmtime())
 
 
 def internet_utc_run_id(timeout=3):
@@ -192,8 +187,7 @@ def internet_utc_run_id(timeout=3):
     if not date_header:
         raise RuntimeError("missing Date header")
     internet_time = email.utils.parsedate_to_datetime(date_header)
-    timestamp = internet_time.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    return unique_run_id(timestamp)
+    return internet_time.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
 def default_run_id():
@@ -391,7 +385,7 @@ def parse_args():
         "--run-id",
         help=(
             "run id sent as runId and included in messageId "
-            "(default: online UTC timestamp plus random suffix, e.g. 20260706T132045Z-a1b2c3d4)"
+            "(default: online UTC timestamp, e.g. 20260706T132045Z)"
         ),
     )
     p.add_argument("--duration", type=float, default=0, help="stop after N seconds (0 = run until Ctrl+C)")

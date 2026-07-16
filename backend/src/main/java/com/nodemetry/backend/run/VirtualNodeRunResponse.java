@@ -2,7 +2,7 @@ package com.nodemetry.backend.run;
 
 import java.time.Instant;
 
-public record TestRunResponse(
+public record VirtualNodeRunResponse(
         String runId,
         String label,
         Instant startedAt,
@@ -19,7 +19,7 @@ public record TestRunResponse(
         Double dupeRatePct,
         boolean running
 ) {
-    public static TestRunResponse from(TestRun r) {
+    public static VirtualNodeRunResponse from(VirtualNodeRun r) {
         Long durationMs = (r.getStartedAt() != null && r.getEndedAt() != null)
                 ? r.getEndedAt().toEpochMilli() - r.getStartedAt().toEpochMilli()
                 : null;
@@ -29,7 +29,7 @@ public record TestRunResponse(
         Double dupeRate = (r.getTotalReceived() > 0)
                 ? r.getDuplicatesSkipped() * 100.0 / r.getTotalReceived()
                 : null;
-        return new TestRunResponse(
+        return new VirtualNodeRunResponse(
                 r.getRunId(),
                 r.getLabel(),
                 r.getStartedAt(),

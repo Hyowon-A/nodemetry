@@ -12,7 +12,13 @@ FROM eclipse-temurin:21-jre
 
 WORKDIR /app
 
-COPY --from=build /app.jar app.jar
+RUN useradd --system --create-home --home-dir /home/app --shell /usr/sbin/nologin appuser
+
+COPY --chown=appuser:appuser --from=build /app.jar app.jar
+
+USER appuser
+
+ENV SPRING_PROFILES_ACTIVE=prod
 
 EXPOSE 8080
 

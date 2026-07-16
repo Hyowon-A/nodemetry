@@ -1,5 +1,6 @@
 package com.nodemetry.backend.telemetry;
 
+import com.nodemetry.backend.run.PhysicalNodeRunRegistry;
 import com.nodemetry.backend.run.RunRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.doubleThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
@@ -28,6 +30,7 @@ class TelemetryBatchIngestServiceTest {
     private JdbcTemplate jdbcTemplate;
     private SimpMessagingTemplate messagingTemplate;
     private RunRegistry runRegistry;
+    private PhysicalNodeRunRegistry physicalNodeRunRegistry;
     private TelemetryBatchIngestService service;
 
     @BeforeEach
@@ -36,11 +39,13 @@ class TelemetryBatchIngestServiceTest {
         jdbcTemplate = new JdbcTemplate(dataSource);
         messagingTemplate = mock(SimpMessagingTemplate.class);
         runRegistry = mock(RunRegistry.class);
+        physicalNodeRunRegistry = mock(PhysicalNodeRunRegistry.class);
         service = new TelemetryBatchIngestService(
                 jdbcTemplate,
                 new TransactionTemplate(new DataSourceTransactionManager(dataSource)),
                 messagingTemplate,
                 runRegistry,
+                physicalNodeRunRegistry,
                 10,
                 10
         );
@@ -93,6 +98,8 @@ class TelemetryBatchIngestServiceTest {
 
         verify(runRegistry).recordSaved("run-001", 2L);
         verify(runRegistry, never()).recordDupe(any(), anyLong());
+        verify(physicalNodeRunRegistry).recordBatch(
+                eq("run-001"), eq("node-001"), eq(2L), eq(0L), doubleThat(ms -> ms > 0));
         verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/nodes/node-001/latest"), any(SensorReadingResponse.class));
         verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/readings"), any(SensorReadingResponse.class));
     }
@@ -107,6 +114,8 @@ class TelemetryBatchIngestServiceTest {
         assertThat(count("sensor_readings")).isEqualTo(1);
         verify(runRegistry).recordSaved("run-001", 1L);
         verify(runRegistry).recordDupe("run-001", 1L);
+        verify(physicalNodeRunRegistry).recordBatch(
+                eq("run-001"), eq("node-001"), eq(1L), eq(1L), doubleThat(ms -> ms > 0));
     }
 
     @Test
@@ -114,7 +123,7 @@ class TelemetryBatchIngestServiceTest {
         service.enqueue(message("message-001", "node-001", "run-001", 87.0));
 
         assertThat(service.drainOnce()).isEqualTo(1);
-        clearInvocations(runRegistry, messagingTemplate);
+        clearInvocations(runRegistry, physicalNodeRunRegistry, messagingTemplate);
 
         service.enqueue(message("message-001", "node-001", "run-001", 86.0));
 
@@ -123,6 +132,8 @@ class TelemetryBatchIngestServiceTest {
         assertThat(count("sensor_readings")).isEqualTo(1);
         verify(runRegistry, never()).recordSaved(any(), anyLong());
         verify(runRegistry).recordDupe("run-001", 1L);
+        verify(physicalNodeRunRegistry).recordBatch(
+                eq("run-001"), eq("node-001"), eq(0L), eq(1L), doubleThat(ms -> ms > 0));
         verifyNoInteractions(messagingTemplate);
     }
 
@@ -147,7 +158,19 @@ class TelemetryBatchIngestServiceTest {
         assertThat(service.invalidCount()).isEqualTo(1);
         assertThat(count("sensor_readings")).isZero();
         assertThat(count("nodes")).isZero();
-        verifyNoInteractions(runRegistry, messagingTemplate);
+        verifyNoInteractions(runRegistry, physicalNodeRunRegistry, messagingTemplate);
+    }
+
+    @Test
+    void messagesWithUnsafeIdentifiersAreDroppedBeforeDatabaseWork() {
+        service.enqueue(message("message-001", "node/../../secret", "run-001", 87.0));
+
+        assertThat(service.drainOnce()).isEqualTo(1);
+
+        assertThat(service.invalidCount()).isEqualTo(1);
+        assertThat(count("sensor_readings")).isZero();
+        assertThat(count("nodes")).isZero();
+        verifyNoInteractions(runRegistry, physicalNodeRunRegistry, messagingTemplate);
     }
 
     @Test
@@ -157,6 +180,7 @@ class TelemetryBatchIngestServiceTest {
                 new TransactionTemplate(new DataSourceTransactionManager(dataSource())),
                 messagingTemplate,
                 runRegistry,
+                physicalNodeRunRegistry,
                 1,
                 10
         );

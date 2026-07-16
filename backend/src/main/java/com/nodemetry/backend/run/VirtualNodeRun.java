@@ -4,8 +4,8 @@ import jakarta.persistence.*;
 import java.time.Instant;
 
 @Entity
-@Table(name = "test_runs")
-public class TestRun {
+@Table(name = "virtual_node_runs")
+public class VirtualNodeRun {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -37,7 +37,7 @@ public class TestRun {
     @Column(name = "duplicates_skipped")
     private long duplicatesSkipped;
 
-    public TestRun() {}
+    public VirtualNodeRun() {}
 
     public Long getId() { return id; }
 
