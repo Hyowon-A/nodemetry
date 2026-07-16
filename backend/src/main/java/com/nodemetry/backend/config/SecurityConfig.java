@@ -2,6 +2,7 @@ package com.nodemetry.backend.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
@@ -15,9 +16,11 @@ import java.util.List;
 public class SecurityConfig {
 
     private final FrontendProperties frontendProperties;
+    private final HttpApiProperties httpApiProperties;
 
-    public SecurityConfig(FrontendProperties frontendProperties) {
+    public SecurityConfig(FrontendProperties frontendProperties, HttpApiProperties httpApiProperties) {
         this.frontendProperties = frontendProperties;
+        this.httpApiProperties = httpApiProperties;
     }
 
     @Bean
@@ -25,10 +28,17 @@ public class SecurityConfig {
         return http
                 .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.disable())
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/**").permitAll()
-                        .anyRequest().permitAll()
-                )
+                .authorizeHttpRequests(auth -> {
+                    if (httpApiProperties.isReadOnly()) {
+                        auth.requestMatchers(HttpMethod.GET, "/api/**").permitAll();
+                        auth.requestMatchers(HttpMethod.HEAD, "/api/**").permitAll();
+                        auth.requestMatchers(HttpMethod.OPTIONS, "/api/**").permitAll();
+                        auth.requestMatchers("/api/**").denyAll();
+                    } else {
+                        auth.requestMatchers("/api/**").permitAll();
+                    }
+                    auth.anyRequest().permitAll();
+                })
                 .build();
     }
 
@@ -37,7 +47,9 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
 
         config.setAllowedOrigins(frontendProperties.getAllowedOrigins());
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(httpApiProperties.isReadOnly()
+                ? List.of("GET", "HEAD", "OPTIONS")
+                : List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(false);
 

@@ -39,5 +39,17 @@ telemetry:
     flush-interval-ms: ${TELEMETRY_INGEST_FLUSH_INTERVAL_MS:100}
 
 app:
+  http-api:
+    read-only: ${HTTP_API_READ_ONLY:false}
   frontend:
     allowed-origins: ${FRONTEND_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: "prod | production"
+
+app:
+  http-api:
+    read-only: ${HTTP_API_READ_ONLY:true}
