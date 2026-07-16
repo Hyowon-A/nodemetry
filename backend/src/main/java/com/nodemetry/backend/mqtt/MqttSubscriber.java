@@ -3,6 +3,7 @@ package com.nodemetry.backend.mqtt;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.eclipse.paho.client.mqttv3.*;
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -24,7 +25,7 @@ public class MqttSubscriber {
     @PostConstruct
     public void connectAndSubscribe() {
         try {
-            client = new MqttClient(properties.getBrokerUri(), properties.getClientId());
+            client = new MqttClient(properties.getBrokerUri(), properties.getClientId(), new MemoryPersistence());
 
             MqttConnectOptions options = new MqttConnectOptions();
             options.setUserName(properties.getUsername());
