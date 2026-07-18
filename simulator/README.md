@@ -24,7 +24,8 @@ pip install "paho-mqtt>=2.0" python-dotenv
 
 ## Environment Variables
 
-The simulator loads `.env` from the simulator directory.
+The simulator loads `.env` from the simulator directory; use `.env.example` as
+the template.
 
 ```text
 MQTT_BROKER

@@ -8,6 +8,7 @@ nodemetry-backend-local-ssl*/
 !**/src/test/**/target/
 .env
 .env.*
+!.env.example
 .DS_Store
 **/.DS_Store
 
