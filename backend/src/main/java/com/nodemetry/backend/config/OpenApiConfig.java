@@ -25,7 +25,7 @@ public class OpenApiConfig {
                                 .url("http://localhost:8080")
                                 .description("Local development"),
                         new Server()
-                                .url("https://TODO_DEPLOYED_BACKEND_URL")
+                                .url("https://nodemetry.onrender.com")
                                 .description("Deployed backend")
                 ));
     }
