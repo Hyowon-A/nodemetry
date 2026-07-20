@@ -9,7 +9,9 @@ over WebSocket/STOMP to a SvelteKit dashboard.
 
 The project is designed to demonstrate production-oriented backend ingestion,
 real-time UI updates, load-test tooling, and practical bottleneck analysis for
-IoT telemetry systems.
+IoT telemetry systems. In measured load tests it sustains 250 virtual nodes at
+~50 msg/s with 99.8% MQTT delivery and 100% persistence; see
+[Load-Test Results](#load-test-results).
 
 ## Links
 
@@ -22,6 +24,7 @@ IoT telemetry systems.
 | ---------------------------- | ---------------------------------------------------------------- |
 | Live physical-node dashboard | <img src="docs/screenshots/dashboard.png" width="50%" />         |
 | Ingestion metrics panel      | <img src="docs/screenshots/ingestion-metrics.png" width="50%" /> |
+| Load-test results            | <img src="docs/screenshots/load-test-results.png" width="50%" /> |
 
 ## Documentation
 
@@ -31,6 +34,10 @@ component READMEs:
 - [Backend README](backend/README.md)
 - [Frontend README](frontend/README.md)
 - [Simulator README](simulator/README.md)
+
+Additional notes:
+
+- [Run-metrics phantom duplicates](docs/run-metrics-phantom-duplicates.md)
 
 ## Architecture
 
@@ -76,6 +83,30 @@ flowchart LR
   load-test views.
 - Python simulator for load testing and duplicate-delivery checks.
 - Production HTTP API read-only mode by default.
+
+## Load-Test Results
+
+Representative QoS 1 runs (shared mode, 10 MQTT connections, 5-second publish
+interval per node), measured by backend run metrics rather than simulator-side
+counters:
+
+| Scenario           | Nodes | Duration | Delivery | Persistence | Throughput |
+| ------------------ | ----- | -------- | -------- | ----------- | ---------- |
+| Baseline           | 100   | 5 min    | 99.7%    | 100.0%      | 19.9 msg/s |
+| 20% duplicate rate | 100   | 5 min    | 99.8%    | 100.0%      | 16.1 msg/s |
+| Stable benchmark   | 250   | 10 min   | 99.8%    | 100.0%      | 49.9 msg/s |
+| Saturation         | 300   | 5 min    | 99.6%    | 94.8%       | 56.6 msg/s |
+
+Key takeaways:
+
+- The stable range holds 250 nodes at ~50 msg/s with 100% persistence over
+  10-minute runs.
+- At 300 nodes, MQTT delivery stays at 99.6% while persistence drops to 94.8%:
+  the bottleneck is the database write path, not broker delivery.
+- The forced duplicate-delivery run rejected all 1,161 repeated `messageId`
+  deliveries (19.4% of received) with zero duplicate rows persisted.
+- QoS 0 and QoS 1 showed equivalent delivery at the 100-node baseline, so QoS 1
+  redelivery cost is negligible at that scale.
 
 ## Tech Stack
 

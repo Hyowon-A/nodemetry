@@ -85,7 +85,7 @@ Shared mode spreads many virtual nodes across a smaller number of MQTT
 connections:
 
 ```bash
-python simulator.py --nodes 250 --interval 5 --qos 1 --shared --connections 5 --duration 120
+python simulator.py --nodes 250 --interval 5 --qos 1 --shared --connections 10 --duration 120
 ```
 
 Use this for throughput testing on connection-capped brokers. Shared mode still
@@ -128,13 +128,13 @@ python simulator.py --nodes 100 --interval 5 --qos 1 --duration 120
 Benchmark:
 
 ```bash
-python simulator.py --nodes 250 --interval 5 --qos 1 --shared --connections 5 --duration 180
+python simulator.py --nodes 250 --interval 5 --qos 1 --shared --connections 10 --duration 180
 ```
 
 Saturation:
 
 ```bash
-python simulator.py --nodes 300 --interval 5 --qos 1 --shared --connections 5 --duration 180
+python simulator.py --nodes 300 --interval 5 --qos 1 --shared --connections 10 --duration 180
 ```
 
 Duplicate delivery:
@@ -146,7 +146,7 @@ python simulator.py --nodes 100 --interval 5 --qos 1 --duplicate-rate 0.2 --dura
 Soak test:
 
 ```bash
-python simulator.py --nodes 250 --interval 5 --qos 1 --shared --connections 5 --duration 1800
+python simulator.py --nodes 250 --interval 5 --qos 1 --shared --connections 10 --duration 1800
 ```
 
 Frontend-controlled warmup mode:
@@ -215,3 +215,7 @@ rate. A successful run should show high backend receipt, low unexpected
 duplicates, and high persistence percentage. If MQTT receipt remains high while
 saved rows fall behind, the bottleneck is likely in database persistence,
 transaction cost, indexing, or batch sizing rather than broker delivery.
+
+Representative measured runs for the baseline, duplicate-rate, benchmark, and
+saturation scenarios are summarized in the root README's
+[Load-Test Results](../README.md#load-test-results) section.
