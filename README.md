@@ -22,9 +22,9 @@ IoT telemetry systems. In measured load tests it sustains 250 virtual nodes at
 
 | View                         | Screenshot                                                       |
 | ---------------------------- | ---------------------------------------------------------------- |
-| Live physical-node dashboard | <img src="docs/screenshots/dashboard.png" width="50%" />         |
-| Ingestion metrics panel      | <img src="docs/screenshots/ingestion-metrics.png" width="50%" /> |
-| Load-test results            | <img src="docs/screenshots/load-test-results.png" width="50%" /> |
+| Live physical-node dashboard | <img src="docs/screenshots/dashboard.png" width="100%" />         |
+| Ingestion metrics panel      | <img src="docs/screenshots/ingestion-metrics.png" width="100%" /> |
+| Load-test results            | <img src="docs/screenshots/load-test-results.png" width="100%" /> |
 
 ## Documentation
 
