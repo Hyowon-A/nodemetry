@@ -7,29 +7,31 @@
 #include <time.h>
 #include <math.h>
 
-// ---------- I2C pins ----------
+// ============================================================
+// I2C and sensors
+// ============================================================
+
 constexpr int SDA_PIN = 21;
 constexpr int SCL_PIN = 22;
 
-// ---------- Sensors ----------
-Adafruit_SHT31 sht3x = Adafruit_SHT31();
+Adafruit_SHT31 sht3x;
 BH1750 lightMeter;
 
 bool sht3xReady = false;
 bool bh1750Ready = false;
 
-// ---------- Week 3 filtering ----------
+// ============================================================
+// Week 3 filtering
+// ============================================================
+
 constexpr int FILTER_WINDOW = 5;
 
-// Calibration offsets remain zero for now
 constexpr float TEMPERATURE_OFFSET = 0.0f;
 constexpr float HUMIDITY_OFFSET = 0.0f;
 
-// Maximum permitted difference from the current moving average
 constexpr float TEMPERATURE_OUTLIER_THRESHOLD = 3.0f;
 constexpr float HUMIDITY_OUTLIER_THRESHOLD = 15.0f;
 
-// Stores and averages the latest five accepted readings
 struct MovingAverageFilter {
   float values[FILTER_WINDOW] = {};
   int index = 0;
@@ -42,15 +44,11 @@ struct MovingAverageFilter {
       sum += value;
       count++;
     } else {
-      // Remove the oldest value from the sum
       sum -= values[index];
-
-      // Replace it with the new value
       values[index] = value;
       sum += value;
     }
 
-    // Move to the next position in the circular buffer
     index = (index + 1) % FILTER_WINDOW;
   }
 
@@ -66,21 +64,46 @@ struct MovingAverageFilter {
 MovingAverageFilter temperatureFilter;
 MovingAverageFilter humidityFilter;
 
-// ---------- Wi-Fi ----------
-const char* WIFI_SSID = "YOUR_WIFI";
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+// ============================================================
+// Wi-Fi
+// ============================================================
 
-// ---------- MQTT ----------
+const char* WIFI_SSID = "VM0900341";
+const char* WIFI_PASSWORD = "qn3vgKzqwpkx";
+
+// ============================================================
+// MQTT
+// ============================================================
+
 const char* MQTT_HOST =
     "9741496ab663426dba9cea75f1df7986.s1.eu.hivemq.cloud";
 
-const int MQTT_PORT = 8883;
+constexpr int MQTT_PORT = 8883;
 
-const char* MQTT_USERNAME = "MQTT_USERNAME";
-const char* MQTT_PASSWORD = "MQTT_PASSWORD";
+const char* MQTT_USERNAME = "nodemetryAdmin";
+const char* MQTT_PASSWORD = "Admin2026";
 
-// ---------- Node details ----------
+// ============================================================
+// Node configuration
+// ============================================================
+
+// This fixes the:
+// 'nodeId' was not declared in this scope
+// compilation error.
 String nodeId = "node-001";
+
+const char* MQTT_TELEMETRY_TOPIC =
+    "nodemetry/node-001/telemetry";
+
+const char* MQTT_STATUS_TOPIC =
+    "nodemetry/node-001/status";
+
+const char* ONLINE_STATUS =
+    "{\"status\":\"online\"}";
+
+const char* OFFLINE_STATUS =
+    "{\"status\":\"offline\"}";
+
 String runId;
 
 unsigned long sequenceNumber = 0;
@@ -88,15 +111,17 @@ unsigned long lastPublishTime = 0;
 
 constexpr unsigned long PUBLISH_INTERVAL_MS = 10000;
 
-// Topic must match nodeId
-const char* MQTT_TOPIC =
-    "nodemetry/node-001/telemetry";
+// ============================================================
+// MQTT client
+// ============================================================
 
-// Secure Wi-Fi client for TLS MQTT
 WiFiClientSecure espClient;
 PubSubClient client(espClient);
 
-// ---------- Connect to Wi-Fi ----------
+// ============================================================
+// Wi-Fi connection
+// ============================================================
+
 void connectToWiFi() {
   Serial.print("Connecting to WiFi");
 
@@ -108,24 +133,26 @@ void connectToWiFi() {
   }
 
   Serial.println();
-  Serial.println("WiFi connected!");
+  Serial.println("WiFi connected");
 
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  Serial.print("WiFi RSSI: ");
+  Serial.print("RSSI: ");
   Serial.print(WiFi.RSSI());
   Serial.println(" dBm");
 }
 
-// ---------- Initialise sensors ----------
+// ============================================================
+// Initialise sensors
+// ============================================================
+
 void initialiseSensors() {
   Serial.println("Starting sensors...");
 
   Wire.begin(SDA_PIN, SCL_PIN);
   Wire.setClock(100000);
 
-  // Most SHT3X boards use address 0x44
   sht3xReady = sht3x.begin(0x44);
 
   if (sht3xReady) {
@@ -144,7 +171,10 @@ void initialiseSensors() {
   }
 }
 
-// ---------- Create runId using UTC time ----------
+// ============================================================
+// Create run ID using UTC time
+// ============================================================
+
 String createRunId() {
   configTime(
       0,
@@ -153,27 +183,29 @@ String createRunId() {
       "time.google.com"
   );
 
-  struct tm timeinfo;
+  struct tm timeInfo;
 
-  while (!getLocalTime(&timeinfo)) {
+  while (!getLocalTime(&timeInfo)) {
     Serial.println("Waiting for NTP time...");
     delay(1000);
   }
 
   char buffer[32];
 
-  // Example: 20260713T153000Z
   strftime(
       buffer,
       sizeof(buffer),
       "%Y%m%dT%H%M%SZ",
-      &timeinfo
+      &timeInfo
   );
 
   return String(buffer);
 }
 
-// ---------- Create unique messageId ----------
+// ============================================================
+// Create unique message ID
+// ============================================================
+
 String createMessageId() {
   sequenceNumber++;
 
@@ -190,7 +222,10 @@ String createMessageId() {
          String(sequenceBuffer);
 }
 
-// ---------- Connect to MQTT ----------
+// ============================================================
+// MQTT connection with Last Will and Testament
+// ============================================================
+
 void connectToMQTT() {
   while (!client.connected()) {
     Serial.print("Connecting to MQTT... ");
@@ -198,16 +233,49 @@ void connectToMQTT() {
     String clientId = "esp32-" + nodeId + "-";
     clientId += String(random(0xffff), HEX);
 
+    /*
+      Last Will configuration:
+
+      If the ESP32 unexpectedly loses power, Wi-Fi or crashes,
+      HiveMQ publishes OFFLINE_STATUS automatically to:
+
+      nodemetry/node-001/status
+    */
+
     bool connected = client.connect(
         clientId.c_str(),
         MQTT_USERNAME,
-        MQTT_PASSWORD
+        MQTT_PASSWORD,
+        MQTT_STATUS_TOPIC,
+        1,
+        true,
+        OFFLINE_STATUS
     );
 
     if (connected) {
-      Serial.println("connected!");
+      Serial.println("connected");
+
+      /*
+        Publish online immediately after connecting.
+
+        Retain is true, so MQTT Explorer always shows
+        the latest node status.
+      */
+
+      bool statusPublished = client.publish(
+          MQTT_STATUS_TOPIC,
+          ONLINE_STATUS,
+          true
+      );
+
+      if (statusPublished) {
+        Serial.println("Online status published");
+      } else {
+        Serial.println("ERROR: Online status publish failed");
+      }
+
     } else {
-      Serial.print("failed, rc=");
+      Serial.print("failed, MQTT state=");
       Serial.print(client.state());
       Serial.println(" - retrying in 5 seconds");
 
@@ -216,13 +284,15 @@ void connectToMQTT() {
   }
 }
 
-// ---------- Check whether a reading is an outlier ----------
+// ============================================================
+// Outlier detection
+// ============================================================
+
 bool isOutlier(
     float newValue,
     const MovingAverageFilter& filter,
     float threshold
 ) {
-  // The first reading cannot be compared with an average
   if (filter.count == 0) {
     return false;
   }
@@ -233,16 +303,19 @@ bool isOutlier(
   return difference > threshold;
 }
 
-// ---------- Read and publish telemetry ----------
+// ============================================================
+// Read sensors and publish telemetry
+// ============================================================
+
 void publishTelemetry() {
   if (!sht3xReady || !bh1750Ready) {
     Serial.println(
-        "Publish cancelled: one or more sensors unavailable"
+        "Publish cancelled: sensors unavailable"
     );
     return;
   }
 
-  // Read the raw sensor values
+  // Raw sensor readings
   float rawTemperature =
       sht3x.readTemperature();
 
@@ -252,28 +325,25 @@ void publishTelemetry() {
   float lightLux =
       lightMeter.readLightLevel();
 
-  // Validate the SHT3X readings
   if (isnan(rawTemperature) ||
       isnan(rawHumidity)) {
     Serial.println("ERROR: SHT3X reading failed");
     return;
   }
 
-  // BH1750 returns a negative value when reading fails
   if (lightLux < 0) {
     Serial.println("ERROR: BH1750 reading failed");
     return;
   }
 
-  // Apply calibration offsets
-  // Both offsets are currently zero
+  // Calibration offsets currently remain zero
   float calibratedTemperature =
       rawTemperature + TEMPERATURE_OFFSET;
 
   float calibratedHumidity =
       rawHumidity + HUMIDITY_OFFSET;
 
-  // Check each reading for an outlier
+  // Check for outliers
   bool temperatureOutlier = isOutlier(
       calibratedTemperature,
       temperatureFilter,
@@ -286,7 +356,7 @@ void publishTelemetry() {
       HUMIDITY_OUTLIER_THRESHOLD
   );
 
-  // Only accepted values enter the moving-average filters
+  // Only accepted readings enter the moving average
   if (!temperatureOutlier) {
     temperatureFilter.add(calibratedTemperature);
   } else {
@@ -303,7 +373,6 @@ void publishTelemetry() {
     Serial.println(" %RH");
   }
 
-  // Calculate the filtered values
   float filteredTemperature =
       temperatureFilter.average();
 
@@ -312,7 +381,10 @@ void publishTelemetry() {
 
   String messageId = createMessageId();
 
-  // ---------- Build JSON telemetry ----------
+  // ==========================================================
+  // Create JSON payload
+  // ==========================================================
+
   String payload = "{";
 
   payload += "\"messageId\":\"";
@@ -327,7 +399,7 @@ void publishTelemetry() {
   payload += runId;
   payload += "\",";
 
-  // Existing dashboard fields use filtered readings
+  // Dashboard compatibility fields
   payload += "\"temperature\":";
   payload += String(filteredTemperature, 2);
   payload += ",";
@@ -336,50 +408,23 @@ void publishTelemetry() {
   payload += String(filteredHumidity, 2);
   payload += ",";
 
-  // Week 3 raw and filtered fields
-  payload += "\"rawTemperature\":";
+  // Raw and filtered Week 3 values
+  payload += "\"temperatureRaw\":";
   payload += String(rawTemperature, 2);
   payload += ",";
 
-  payload += "\"filteredTemperature\":";
+  payload += "\"temperatureFiltered\":";
   payload += String(filteredTemperature, 2);
   payload += ",";
 
-  payload += "\"rawHumidity\":";
+  payload += "\"humidityRaw\":";
   payload += String(rawHumidity, 2);
   payload += ",";
 
-  payload += "\"filteredHumidity\":";
+  payload += "\"humidityFiltered\":";
   payload += String(filteredHumidity, 2);
   payload += ",";
 
-  // Outlier flags
-  payload += "\"temperatureOutlier\":";
-
-  if (temperatureOutlier) {
-    payload += "true,";
-  } else {
-    payload += "false,";
-  }
-
-  payload += "\"humidityOutlier\":";
-
-  if (humidityOutlier) {
-    payload += "true,";
-  } else {
-    payload += "false,";
-  }
-
-  // Calibration offsets
-  payload += "\"temperatureOffset\":";
-  payload += String(TEMPERATURE_OFFSET, 2);
-  payload += ",";
-
-  payload += "\"humidityOffset\":";
-  payload += String(HUMIDITY_OFFSET, 2);
-  payload += ",";
-
-  // Other telemetry fields
   payload += "\"battery\":null,";
 
   payload += "\"light\":";
@@ -390,12 +435,16 @@ void publishTelemetry() {
   payload += String(WiFi.RSSI());
   payload += ",";
 
-  payload += "\"firmwareVersion\":\"firmware-3.0.0\"";
+  payload += "\"firmwareVersion\":\"firmware-4.0.0\"";
 
   payload += "}";
 
-  // ---------- Serial Monitor output ----------
+  // ==========================================================
+  // Serial output
+  // ==========================================================
+
   Serial.println();
+
   Serial.print("Temperature raw: ");
   Serial.print(rawTemperature, 2);
   Serial.print(" C | filtered: ");
@@ -408,23 +457,17 @@ void publishTelemetry() {
   Serial.print(filteredHumidity, 2);
   Serial.println(" %RH");
 
-  Serial.print("Filter samples: ");
-  Serial.print(temperatureFilter.count);
-  Serial.print("/");
-  Serial.println(FILTER_WINDOW);
-
-  Serial.print("Payload length: ");
-  Serial.println(payload.length());
-
   Serial.println("Publishing telemetry:");
   Serial.println(payload);
 
-  // ---------- Publish to MQTT ----------
-  bool success =
-      client.publish(
-          MQTT_TOPIC,
-          payload.c_str()
-      );
+  // ==========================================================
+  // MQTT publish
+  // ==========================================================
+
+  bool success = client.publish(
+      MQTT_TELEMETRY_TOPIC,
+      payload.c_str()
+  );
 
   if (success) {
     Serial.println("Publish successful");
@@ -433,10 +476,16 @@ void publishTelemetry() {
   }
 }
 
-// ---------- Setup ----------
+// ============================================================
+// Setup
+// ============================================================
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
+
+  Serial.println();
+  Serial.println("Starting Nodemetry ESP32 node");
 
   initialiseSensors();
 
@@ -447,30 +496,34 @@ void setup() {
   Serial.print("Run ID: ");
   Serial.println(runId);
 
-  // Skips TLS certificate validation.
-  // Suitable for development, but not final production.
+  // Development-only TLS configuration
   espClient.setInsecure();
 
-  client.setServer(MQTT_HOST, MQTT_PORT);
+  client.setServer(
+      MQTT_HOST,
+      MQTT_PORT
+  );
 
-  // Week 3 JSON is larger than the Week 2 message
-  client.setBufferSize(1024);
+  // Required for the larger raw/filtered JSON payload
+  client.setBufferSize(512);
 
   connectToMQTT();
 
   Serial.println();
-  Serial.println("Week 3 system ready");
+  Serial.println("System ready");
 }
 
-// ---------- Main loop ----------
+// ============================================================
+// Main loop
+// ============================================================
+
 void loop() {
-  // Reconnect Wi-Fi if necessary
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi disconnected");
+
     connectToWiFi();
   }
 
-  // Reconnect MQTT if necessary
   if (!client.connected()) {
     connectToMQTT();
   }
@@ -484,6 +537,7 @@ void loop() {
       PUBLISH_INTERVAL_MS
   ) {
     lastPublishTime = currentTime;
+
     publishTelemetry();
   }
 }
