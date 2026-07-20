@@ -102,6 +102,8 @@ In production read-only mode, `/api/**` permits only `GET`, `HEAD`, and
 
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
 - OpenAPI JSON: `http://localhost:8080/v3/api-docs`
+- Deployed Swagger UI: `https://nodemetry.onrender.com/swagger-ui.html`
+- Deployed OpenAPI JSON: `https://nodemetry.onrender.com/v3/api-docs`
 
 Export the OpenAPI document for Postman or other API tooling:
 

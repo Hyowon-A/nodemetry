@@ -16,7 +16,7 @@ IoT telemetry systems. In measured load tests it sustains 250 virtual nodes at
 ## Links
 
 - [Live demo](https://nodemetry.vercel.app)
-- [Backend API](https://nodemetry.onrender.com/swagger-ui.html)
+- [Backend API docs](https://nodemetry.onrender.com/swagger-ui.html)
 
 ## Screenshots
 
