@@ -51,13 +51,13 @@ TELEMETRY_INGEST_FLUSH_INTERVAL_MS
 Optional run-metric tuning:
 
 ```text
-run.metrics.virtual-node-prefixes
-run.metrics.physical-idle-evict-ms
-run.metrics.end-grace-ms
+RUN_METRICS_VIRTUAL_NODE_PREFIXES
+RUN_METRICS_PHYSICAL_IDLE_EVICT_MS
+RUN_METRICS_END_GRACE_MS
 ```
 
-`run-local.sh` sources `backend/.env`, so local secrets can live there. Do not
-commit `.env` files.
+Use `.env.example` as the template for `backend/.env`. `run-local.sh` sources
+`backend/.env`, so local secrets can live there. Do not commit `.env` files.
 
 ## Run Locally
 
@@ -102,6 +102,8 @@ In production read-only mode, `/api/**` permits only `GET`, `HEAD`, and
 
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
 - OpenAPI JSON: `http://localhost:8080/v3/api-docs`
+- Deployed Swagger UI: `https://nodemetry.onrender.com/swagger-ui.html`
+- Deployed OpenAPI JSON: `https://nodemetry.onrender.com/v3/api-docs`
 
 Export the OpenAPI document for Postman or other API tooling:
 
@@ -162,7 +164,8 @@ Main tables:
 
 1. `MqttSubscriber` subscribes to `nodemetry/+/telemetry` and
    `nodemetry/+/status`.
-2. `MqttMessageHandler` parses JSON and ignores retained telemetry.
+2. `MqttMessageHandler` parses JSON and ignores retained telemetry and status
+   messages.
 3. Telemetry is enqueued into `TelemetryBatchIngestService`.
 4. Batches are drained on the configured interval.
 5. Invalid messages are counted and skipped before database work.

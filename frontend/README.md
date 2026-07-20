@@ -28,14 +28,18 @@ npm run preview
 
 ## Environment Variables
 
-Browser-facing values go in `frontend/.env`:
+Browser-facing values go in `frontend/.env`; use `.env.example` as the
+template:
 
 ```text
 PUBLIC_API_BASE=http://localhost:8080
 PUBLIC_WS_URL=ws://localhost:8080/ws
 PUBLIC_INCLUDE_VNODES=true
+PUBLIC_USE_MOCK=false
 ```
 
+`PUBLIC_USE_MOCK=false` connects the dashboard to the live backend; when it is
+omitted or set to another value, the dashboard uses its local mock feed.
 `PUBLIC_INCLUDE_VNODES` is optional and mainly useful in development. Do not put
 secrets in `PUBLIC_` variables because they are bundled into browser code.
 
@@ -85,7 +89,6 @@ Startup flow:
 4. Subscribe to:
    - `/topic/readings`
    - `/topic/nodes/status`
-   - `/topic/nodes/{nodeId}/latest`
 
 Incoming messages update the reactive state in `src/lib/telemetry.svelte.js`.
 
