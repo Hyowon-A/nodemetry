@@ -68,20 +68,20 @@ MovingAverageFilter humidityFilter;
 // Wi-Fi
 // ============================================================
 
-const char* WIFI_SSID = "VM0900341";
-const char* WIFI_PASSWORD = "qn3vgKzqwpkx";
+const char* WIFI_SSID = "WIFI_NAME";
+const char* WIFI_PASSWORD = "WIFI_PASSWORD";
 
 // ============================================================
 // MQTT
 // ============================================================
 
 const char* MQTT_HOST =
-    "9741496ab663426dba9cea75f1df7986.s1.eu.hivemq.cloud";
+    "MQTT_HOST_NAME";
 
-constexpr int MQTT_PORT = 8883;
+constexpr int MQTT_PORT = MQTT_PORT;
 
-const char* MQTT_USERNAME = "nodemetryAdmin";
-const char* MQTT_PASSWORD = "Admin2026";
+const char* MQTT_USERNAME = "MQTT_USERNAME";
+const char* MQTT_PASSWORD = "MQTT_PASSWORD";
 
 // ============================================================
 // Node configuration
