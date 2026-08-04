@@ -252,7 +252,11 @@ A short video was recorded showing:
 - MQTT connection;
 - readings appearing on the dashboard
 
-<video controls src="videos/hardware-demo.mp4" title="Title"></video>
+
+
+https://github.com/user-attachments/assets/3401beb0-de9c-4061-98bc-81bceec3d29b
+
+
 
 ## 7. Key Findings
 
