@@ -1,132 +1,192 @@
 # Nodemetry
 
-Live environmental telemetry platform for low-power MQTT sensor nodes. Devices
-(or the bundled simulator) publish JSON readings over MQTT; a Spring Boot backend
-ingests them into PostgreSQL and re-streams them to a SvelteKit dashboard over a
-WebSocket.
+Nodemetry is an MQTT-based IoT telemetry platform for physical ESP32 sensor
+nodes and virtual load-test nodes. The Spring Boot backend ingests telemetry
+over MQTT/TLS, validates message identifiers, handles QoS 1 redelivery
+idempotently with unique `messageId` values, persists readings in PostgreSQL,
+tracks node health and run-level ingestion metrics, and broadcasts live updates
+over WebSocket/STOMP to a SvelteKit dashboard.
+
+The project is designed to demonstrate production-oriented backend ingestion,
+real-time UI updates, load-test tooling, and practical bottleneck analysis for
+IoT telemetry systems. In measured load tests it sustains 250 virtual nodes at
+~50 msg/s with 99.8% MQTT delivery and 100% persistence; see
+[Load-Test Results](#load-test-results).
+
+## Links
+
+- [Live demo](https://nodemetry.vercel.app)
+- [Backend API docs](https://nodemetry.onrender.com/swagger-ui.html)
+
+## Screenshots
+
+| View                         | Screenshot                                                       |
+| ---------------------------- | ---------------------------------------------------------------- |
+| Live physical-node dashboard | <img src="docs/screenshots/dashboard.png" width="100%" />         |
+| Ingestion metrics panel      | <img src="docs/screenshots/ingestion-metrics.png" width="100%" /> |
+| Load-test results            | <img src="docs/screenshots/load-test-results.png" width="100%" /> |
+
+## Documentation
+
+Component-specific setup, configuration, and operational details live in the
+component READMEs:
+
+- [Backend README](backend/README.md)
+- [Frontend README](frontend/README.md)
+- [Simulator README](simulator/README.md)
+
+Additional notes:
+
+- [Run-metrics phantom duplicates](docs/run-metrics-phantom-duplicates.md)
 
 ## Architecture
 
-```
-ESP32 / simulator ──MQTT (TLS)──▶ HiveMQ Cloud broker
-                                        │  nodemetry/{id}/telemetry
-                                        │  nodemetry/{id}/status
-                                        ▼
-                              Spring Boot backend ──▶ PostgreSQL
-                              (batch ingest, dedup)
-                                        │  STOMP  /topic/readings
-                                        ▼  (WebSocket /ws)
-                              SvelteKit dashboard (browser)
-```
-
-- Devices publish to `nodemetry/{nodeId}/telemetry` (readings) and
-  `nodemetry/{nodeId}/status` (`online`/`offline`, retained + Last Will).
-- The backend subscribes, validates and de-duplicates by `messageId`, batches
-  inserts into Postgres, and pushes each stored reading to STOMP subscribers.
-- The dashboard bootstraps the fleet + recent history over REST, then streams
-  live readings over STOMP.
-
-## Components
-
-| Directory    | Stack                              | Responsibility                          |
-|--------------|------------------------------------|-----------------------------------------|
-| `backend/`   | Spring Boot 4.1, Java 21, Postgres | MQTT ingest + REST/WebSocket API         |
-| `frontend/`  | SvelteKit 2, Svelte 5              | Live dashboard (+ dev-only load tester) |
-| `simulator/` | Python 3, paho-mqtt 2.x           | Virtual sensor-node load generator       |
-
-## Quick start
-
-### Backend
-Needs Java 21 and a reachable PostgreSQL. Fill in `backend/.env` (keys below), then:
-
-```bash
-cd backend
-./run-local.sh          # sources .env, runs ./mvnw spring-boot:run
+```mermaid
+flowchart LR
+    ESP32[Physical ESP32 nodes] -->|MQTT/TLS QoS 1| Broker[MQTT broker]
+    Sim[Python simulator<br/>virtual nodes] -->|MQTT/TLS QoS 0/1/2| Broker
+    Broker -->|nodemetry/+/telemetry<br/>nodemetry/+/status| Backend[Spring Boot backend]
+    Backend -->|batch insert<br/>idempotent messageId| DB[(PostgreSQL)]
+    Backend -->|STOMP topics| WS[WebSocket /ws]
+    WS --> Frontend[SvelteKit dashboard]
+    Frontend -->|REST bootstrap and polling| Backend
 ```
 
-Serves on `:8080`. MQTT ingest stays off unless `MQTT_ENABLED=true` (useful for
-running the API against an existing database without a broker).
+## Data Flow
 
-### Frontend
-Needs Node 20 (pinned in `frontend/.nvmrc`).
+1. A physical ESP32 node or virtual simulator node publishes telemetry to
+   `nodemetry/{nodeId}/telemetry`.
+2. Nodes also publish retained status messages to `nodemetry/{nodeId}/status`;
+   the simulator sets Last Will messages for unclean disconnect detection.
+3. The backend MQTT subscriber receives messages from the broker and forwards
+   telemetry into an in-memory batch queue.
+4. The batch ingest service validates required fields and safe identifier
+   formats before database work begins.
+5. Unique readings are inserted into `sensor_readings`; duplicate `messageId`
+   values are counted and rejected.
+6. Node health is updated in `nodes`.
+7. Virtual load-test runs are tracked as aggregate runs, while physical nodes are
+   tracked per `(runId, nodeId)` in `physical_node_runs`.
+8. Stored readings and node-status changes are broadcast over STOMP topics.
+9. The dashboard bootstraps current state over REST, then keeps itself current
+   through WebSocket updates and metric polling.
 
-```bash
-cd frontend
-npm install
-npm run dev             # http://localhost:5173
+## Main Engineering Features
+
+- MQTT/TLS telemetry ingestion with QoS 1 duplicate tolerance.
+- Idempotent persistence using globally unique `messageId` values.
+- Batched database writes with queue capacity and batch-size tuning.
+- PostgreSQL-backed node, reading, virtual-run, and physical-run state.
+- Per-node physical-run metrics and aggregate virtual load-test metrics.
+- STOMP over WebSocket for live readings, node status, and latest-node updates.
+- SvelteKit dashboard with physical-node charts and read-only production
+  load-test views.
+- Python simulator for load testing and duplicate-delivery checks.
+- Production HTTP API read-only mode by default.
+
+## Load-Test Results
+
+Representative QoS 1 runs (shared mode, 10 MQTT connections, 5-second publish
+interval per node), measured by backend run metrics rather than simulator-side
+counters:
+
+| Scenario           | Nodes | Duration | Delivery | Persistence | Throughput |
+| ------------------ | ----- | -------- | -------- | ----------- | ---------- |
+| Baseline           | 100   | 5 min    | 99.7%    | 100.0%      | 19.9 msg/s |
+| 20% duplicate rate | 100   | 5 min    | 99.8%    | 100.0%      | 16.1 msg/s |
+| Stable benchmark   | 250   | 10 min   | 99.8%    | 100.0%      | 49.9 msg/s |
+| Saturation         | 300   | 5 min    | 99.6%    | 94.8%       | 56.6 msg/s |
+
+Key takeaways:
+
+- The stable range holds 250 nodes at ~50 msg/s with 100% persistence over
+  10-minute runs.
+- At 300 nodes, MQTT delivery stays at 99.6% while persistence drops to 94.8%:
+  the bottleneck is the database write path, not broker delivery.
+- The forced duplicate-delivery run rejected all 1,161 repeated `messageId`
+  deliveries (19.4% of received) with zero duplicate rows persisted.
+- QoS 0 and QoS 1 showed equivalent delivery at the 100-node baseline, so QoS 1
+  redelivery cost is negligible at that scale.
+
+## Tech Stack
+
+| Layer      | Technology                                                              |
+| ---------- | ----------------------------------------------------------------------- |
+| Backend    | Java 21, Spring Boot 4.1, Spring MVC, Spring Data JPA, Spring WebSocket |
+| Database   | PostgreSQL in production, H2 for tests                                  |
+| Messaging  | MQTT/TLS, paho-mqtt for simulator, Eclipse Paho client for backend      |
+| Frontend   | SvelteKit 2, Svelte 5, Vite, STOMP over WebSocket                       |
+| Simulator  | Python 3, paho-mqtt 2.x                                                 |
+| Build/test | Maven wrapper, npm, Python stdlib compile checks                        |
+
+## Repository Structure
+
+```text
+nodemetry/
+├── backend/       Spring Boot MQTT ingest, REST API, WebSocket, persistence
+├── frontend/      SvelteKit dashboard and dev-only simulator control endpoint
+├── simulator/     Python virtual MQTT node load generator
+├── docs/          Supporting notes and screenshots
+└── README.md      Project overview
 ```
 
-Connects to the live backend over REST + STOMP. Set `PUBLIC_API_BASE` and
-`PUBLIC_WS_URL` in `frontend/.env`; use the simulator or real devices to publish
-telemetry into the backend. See [`frontend/README.md`](frontend/README.md).
+## Quick Start
 
-### Simulator
-Needs Python 3 and `paho-mqtt>=2.0`.
+See the component READMEs for local setup, required environment variables, and
+run commands.
 
-```bash
-cd simulator
-python simulator.py --nodes 100 --interval 10 --qos 1 --tls \
-    --broker YOUR.hivemq.cloud --port 8883 --username U --password P
-```
+## Message and Run Identifiers
 
-Or set `simulator/.env` (`MQTT_BROKER`, `MQTT_PORT`, `MQTT_USERNAME`,
-`MQTT_PASSWORD`, `MQTT_TLS`) and drop the connection flags.
+`messageId` identifies a single telemetry reading. It must be unique for each
+unique reading. The backend rejects repeated `messageId` values so MQTT QoS 1
+redelivery and intentional duplicate tests do not create duplicate database
+rows.
 
-## Configuration
+`runId` groups readings into a run. Physical nodes can emit a `runId` in their
+telemetry and are tracked per node and per run. Virtual simulator nodes share a
+load-test `runId` so the dashboard can present aggregate run results.
 
-Secrets live in per-component `.env` files. **These are git-ignored — never commit
-them**, and inject them from your platform's secret store when deploying.
+## QoS 1 Duplicate Handling
 
-**`backend/.env`**
-```
-DB_URL, DB_USERNAME, DB_PASSWORD
-MQTT_ENABLED, MQTT_HOST, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD, MQTT_CLIENT_ID
-FRONTEND_ALLOWED_ORIGINS      # CORS + WebSocket origin allowlist, comma-separated
-# optional ingest tuning:
-TELEMETRY_INGEST_QUEUE_CAPACITY, TELEMETRY_INGEST_BATCH_SIZE, TELEMETRY_INGEST_FLUSH_INTERVAL_MS
-```
+MQTT QoS 1 guarantees at-least-once delivery, not exactly-once persistence. A
+publisher or broker may redeliver a message. Nodemetry treats duplicate
+`messageId` values as repeated deliveries:
 
-**`frontend/.env`**
-```
-PUBLIC_API_BASE      # e.g. http://localhost:8080
-PUBLIC_WS_URL        # e.g. ws://localhost:8080/ws
-```
+- First unique `messageId`: inserted into `sensor_readings`.
+- Repeated `messageId`: counted as a duplicate and skipped.
+- Metrics reconcile saved rows against duplicate events so persisted data is the
+  source of truth.
 
-**`simulator/.env`**
-```
-MQTT_BROKER, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD, MQTT_TLS
-```
+## Physical Versus Virtual Nodes
 
-## API (backend)
+Physical nodes are monitored individually. Their status, latest reading, history,
+and run metrics are shown in the main dashboard.
 
-```
-GET   /api/v1/nodes
-GET   /api/v1/nodes/{nodeId}/latest
-GET   /api/v1/nodes/{nodeId}/readings
-GET   /api/v1/nodes/{nodeId}/runs
-GET   /api/v1/nodes/{nodeId}/runs/{runId}/readings
-GET   /api/v1/runs
-POST  /api/v1/runs                 # start a load-test run
-PATCH /api/v1/runs/{runId}/end     # end a run
+Virtual nodes use the default `vnode-*` prefix and are primarily used for load
+testing. They are hidden from the main live dashboard by default and summarized
+as load-test runs.
 
-WS    /ws   (STOMP)
-      /topic/readings                live readings
-      /topic/nodes/status            status changes
-      /topic/nodes/{nodeId}/latest   per-node latest reading
-```
+## Testing
 
-Alert evaluation and ingestion metrics are derived **client-side** in the
-dashboard from the reading stream; there is no server-side alerts/metrics endpoint.
+See the component READMEs for test and build commands.
 
-## Deployment notes
+## Deployment Overview
 
-- **The API and WebSocket are currently unauthenticated** — `SecurityConfig`
-  permits every request. CORS limits browser origins but not direct
-  (`curl`/script) requests. Before exposing this on the public internet, put it
-  behind authentication, a private network, or a gateway/reverse-proxy password.
-- **The load tester is hidden in production.** The `/load-tester` page and its
-  `/api/simulator` control endpoint (which spawns the Python simulator) return
-  404 in any built/deployed frontend; they exist only under `npm run dev`.
-- The backend `Dockerfile` builds a runnable jar. It currently runs as root and
-  Hibernate `ddl-auto` is `update` — prefer a non-root user and
-  `validate` + managed migrations for production.
+Production should provide PostgreSQL credentials, broker credentials, frontend
+origin allowlists, and public frontend API/WebSocket URLs through a secret store
+or platform environment variables.
+
+## Limitations
+
+- REST reads and WebSocket access are unauthenticated.
+- Hibernate uses `ddl-auto=update`; managed migrations are recommended before
+  long-term production use.
+- The persistence path needs further tuning above the stable benchmark range.
+
+## Future Improvements
+
+- Add authentication or gateway protection for public REST/WebSocket access.
+- Replace `ddl-auto=update` with managed migrations.
+- Tune batch insert behavior, database indexes, and connection pooling for the
+  300-node saturation case.
+- Add automated end-to-end tests for MQTT ingest through dashboard rendering.

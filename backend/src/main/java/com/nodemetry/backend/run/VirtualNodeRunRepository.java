@@ -9,10 +9,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 
-public interface TestRunRepository extends JpaRepository<TestRun, Long> {
-    Optional<TestRun> findByRunId(String runId);
+public interface VirtualNodeRunRepository extends JpaRepository<VirtualNodeRun, Long> {
+    Optional<VirtualNodeRun> findByRunId(String runId);
     boolean existsByRunId(String runId);
-    List<TestRun> findAllByOrderByStartedAtDesc();
+    List<VirtualNodeRun> findAllByOrderByStartedAtDesc();
 
     // Absolute write (not increment) so it is idempotent: RunRegistry reconciles
     // its in-memory events against sensor_readings and mirrors the result here.
@@ -22,7 +22,7 @@ public interface TestRunRepository extends JpaRepository<TestRun, Long> {
     @Transactional
     @Modifying
     @Query("""
-            update TestRun r
+            update VirtualNodeRun r
             set r.totalSaved = :saved, r.duplicatesSkipped = :dupes
             where r.runId = :runId
             """)

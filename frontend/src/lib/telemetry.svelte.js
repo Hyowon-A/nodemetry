@@ -12,27 +12,16 @@
  *   GET  /api/v1/nodes
  *   GET  /api/v1/nodes/{nodeId}/latest
  *   GET  /api/v1/nodes/{nodeId}/readings?from=&to=
- *   GET  /api/v1/alerts
- *   PATCH /api/v1/alerts/{alertId}/acknowledge
  *   GET  /api/v1/metrics/ingestion
- *   WS   /ws/telemetry   (push: { type:'reading'|'status'|'alert', ... })
+ *   WS   /ws/telemetry   (push: { type:'reading'|'status', ... })
  *
- * See applyReading()/applyStatus()/pushAlert() — feed your WebSocket
+ * See applyReading()/applyStatus() — feed your WebSocket
  * messages into those and the whole UI updates.
  * ------------------------------------------------------------------
  */
 
 const WINDOW = 48; // points kept per metric per node (rolling time window)
 const TICK_MS = 1800; // mock publish cadence
-
-/** Thresholds for alert rules (from the plan). */
-const RULES = {
-  tempMax: 28,
-  humidityMin: 35,
-  batteryMin: 20,
-  rssiMin: -75,
-  lightMin: 50, // lux — below this suggests a covered sensor or near-dark environment
-};
 
 /* ----------------------------- state ----------------------------- */
 
@@ -44,14 +33,12 @@ export const store = $state({
   selectedNodeId: null,
   selectedRunIdsByNodeId: {},
   nodes: [],
-  alerts: [],
   metrics: {
     messagesReceived: 0,
     messagesSaved: 0,
     duplicatesSkipped: 0,
     activeNodes: 0,
     offlineNodes: 0,
-    alertsCreated: 0,
     avgProcessingMs: 0,
     throughput: 0,
   },
@@ -109,25 +96,18 @@ export function selectNodeRun(nodeId, runId) {
   store.selectedRunIdsByNodeId = next;
 }
 
-export function acknowledgeAlert(id) {
-  const a = store.alerts.find((x) => x.id === id);
-  if (a) a.acknowledged = true;
-  if (ackHandler) ackHandler(id);
-}
-
 /* ----------------------- live backend wiring ----------------------- */
 
-let localPipeline = true;
-let ackHandler = null;
+let localPipeline = $state(true);
 
-/** Toggle whether applyReading/applyStatus also run local alert evaluation. */
+/** Toggle whether applyReading() also updates client-side mock pipeline metrics. */
 export function setLocalPipeline(enabled) {
   localPipeline = enabled;
 }
 
-/** Register a handler invoked when the user acknowledges an alert (e.g. PATCH to backend). */
-export function setAckHandler(fn) {
-  ackHandler = fn;
+/** True once a real backend owns the pipeline (reactive, set by connectLive). */
+export function isLivePipeline() {
+  return !localPipeline;
 }
 
 export function setNodes(nodes) {
@@ -139,11 +119,6 @@ export function setNodes(nodes) {
     nodes[0]?.nodeId ??
     null;
   recountNodes();
-}
-
-export function setAlerts(alerts) {
-  store.alerts = alerts;
-  for (const a of alerts) activeAlertKeys.add(`${a.nodeId}:${a.type}`);
 }
 
 export function setMetrics(metrics) {
@@ -227,7 +202,6 @@ export function emptyIngestionMetrics() {
     messagesReceived: 0,
     messagesSaved: 0,
     duplicatesSkipped: 0,
-    alertsCreated: 0,
     avgProcessingMs: 0,
     throughput: 0,
     lastMessageAt: null,
@@ -279,7 +253,6 @@ function pushPoint(arr, v, limit = WINDOW) {
 /* These mirror what the backend does, so a real WS feed can call them. */
 
 const seenMessageIds = new Set();
-const activeAlertKeys = new Set();
 const nodeMessageWindows = new Map();
 
 function ensureNodeIngestion(node) {
@@ -308,9 +281,44 @@ function noteNodeMessage(node, now) {
   refreshNodeThroughput(node, now);
 }
 
-function noteNodeAlert(nodeId) {
+/**
+ * Overwrite a node's counters with a persisted row from
+ * GET /api/v1/metrics/ingestion (the backend's physical_node_runs table).
+ * A null row means the backend has nothing for the requested scope, so the
+ * counters reset. Live WebSocket increments keep the numbers moving between
+ * refreshes; the rolling 5s throughput stays client-side while messages are
+ * flowing and falls back to the row's run-average when they are not.
+ */
+export function applyIngestionMetrics(nodeId, row, options = {}) {
   const node = store.nodes.find((n) => n.nodeId === nodeId);
-  if (node) ensureNodeIngestion(node).alertsCreated++;
+  if (!node) return;
+  const { preferPersistedThroughput = false } = options;
+  const metrics = ensureNodeIngestion(node);
+
+  if (!row) {
+    metrics.messagesReceived = 0;
+    metrics.messagesSaved = 0;
+    metrics.duplicatesSkipped = 0;
+    metrics.avgProcessingMs = 0;
+    metrics.throughput = 0;
+    metrics.lastMessageAt = null;
+    return;
+  }
+
+  metrics.messagesReceived = row.messagesReceived ?? 0;
+  metrics.messagesSaved = row.messagesSaved ?? 0;
+  metrics.duplicatesSkipped = row.duplicatesSkipped ?? 0;
+  metrics.avgProcessingMs = row.avgProcessingMs ?? 0;
+
+  const serverLastMs = row.lastMessageAt ? Date.parse(row.lastMessageAt) : null;
+  if (preferPersistedThroughput) {
+    metrics.lastMessageAt = serverLastMs;
+  } else if (serverLastMs && serverLastMs > (metrics.lastMessageAt ?? 0)) {
+    metrics.lastMessageAt = serverLastMs;
+  }
+  if (preferPersistedThroughput || nodeMessageWindow(node.nodeId).length === 0) {
+    metrics.throughput = row.throughput ?? 0;
+  }
 }
 
 /** Apply one telemetry reading (the WebSocket "reading" event). */
@@ -341,13 +349,19 @@ export function applyReading(r) {
     store.selectedNodeId ??= node.nodeId;
   }
 
+  // With a run selected, the node's ingestion panel shows that run only, so
+  // live counters for other runs must not bleed into it (the fleet-wide
+  // store.metrics keep counting everything).
+  const selectedRunId = selectedRunIdForNode(node.nodeId);
+  const runMatches = !selectedRunId || r.runId === selectedRunId;
+
   store.metrics.messagesReceived++;
-  noteNodeMessage(node, receivedAt);
+  if (runMatches) noteNodeMessage(node, receivedAt);
 
   // duplicate handling via messageId (idempotent writes)
   if (r.messageId && seenMessageIds.has(r.messageId)) {
     store.metrics.duplicatesSkipped++;
-    ensureNodeIngestion(node).duplicatesSkipped++;
+    if (runMatches) ensureNodeIngestion(node).duplicatesSkipped++;
     return;
   }
   if (r.messageId) seenMessageIds.add(r.messageId);
@@ -366,8 +380,7 @@ export function applyReading(r) {
     light: r.lightRaw ?? r.light ?? node.latest.light,
   };
 
-  const selectedRunId = selectedRunIdForNode(node.nodeId);
-  if (!selectedRunId || r.runId === selectedRunId) {
+  if (runMatches) {
     const historyLimit = selectedRunId ? null : WINDOW;
     pushPoint(node.history.t, measuredAt, historyLimit);
     pushPoint(node.history.temperature, node.latest.temperature, historyLimit);
@@ -385,7 +398,7 @@ export function applyReading(r) {
     );
     pushPoint(node.history.light, node.latest.light, historyLimit);
   }
-  ensureNodeIngestion(node).messagesSaved++;
+  if (runMatches) ensureNodeIngestion(node).messagesSaved++;
   recountNodes();
 
   if (localPipeline) {
@@ -396,7 +409,6 @@ export function applyReading(r) {
       store.metrics.avgProcessingMs * 0.9 + proc * 0.1;
     node.ingestion.avgProcessingMs =
       node.ingestion.avgProcessingMs * 0.9 + proc * 0.1;
-    evaluateAlerts(node);
   }
 }
 
@@ -404,93 +416,11 @@ export function applyReading(r) {
 export function applyStatus(nodeId, status, reason) {
   const node = store.nodes.find((n) => n.nodeId === nodeId);
   if (!node) return;
-  const was = node.status;
   node.status = status;
   if (status === "offline") {
     node.lastSeenAt = node.lastSeenAt || Date.now();
-    if (was === "online") {
-      pushAlert(
-        node.nodeId,
-        "offline",
-        "critical",
-        `Node went offline${reason ? ` (${reason})` : ""}`,
-      );
-    }
-  } else {
-    activeAlertKeys.delete(`${nodeId}:offline`);
   }
   recountNodes();
-}
-
-/** Apply a backend-pushed alert (the WebSocket "alert" event) directly into the store. */
-export function applyAlert(alert) {
-  const key = `${alert.nodeId}:${alert.type}`;
-  activeAlertKeys.add(key);
-  store.alerts.unshift(alert);
-  if (store.alerts.length > 40) store.alerts.pop();
-  store.metrics.alertsCreated++;
-  noteNodeAlert(alert.nodeId);
-}
-
-function pushAlert(nodeId, type, severity, message) {
-  const key = `${nodeId}:${type}`;
-  if (activeAlertKeys.has(key)) return;
-  activeAlertKeys.add(key);
-  store.alerts.unshift({
-    id: `${nodeId}-${type}-${Date.now()}`,
-    nodeId,
-    type,
-    severity,
-    message,
-    acknowledged: false,
-    createdAt: Date.now(),
-  });
-  if (store.alerts.length > 40) store.alerts.pop();
-  store.metrics.alertsCreated++;
-  noteNodeAlert(nodeId);
-}
-
-function clearAlert(nodeId, type) {
-  activeAlertKeys.delete(`${nodeId}:${type}`);
-}
-
-function evaluateAlerts(node) {
-  const l = node.latest;
-  const check = (cond, type, severity, msg) =>
-    cond
-      ? pushAlert(node.nodeId, type, severity, msg)
-      : clearAlert(node.nodeId, type);
-
-  check(
-    l.temperature != null && l.temperature > RULES.tempMax,
-    "temp",
-    "warning",
-    `Temperature ${l.temperature.toFixed(1)}°C above ${RULES.tempMax}°C`,
-  );
-  check(
-    l.humidity != null && l.humidity < RULES.humidityMin,
-    "humidity",
-    "warning",
-    `Humidity ${l.humidity.toFixed(0)}% below ${RULES.humidityMin}%`,
-  );
-  check(
-    node.battery != null && node.battery < RULES.batteryMin,
-    "battery",
-    "warning",
-    `Battery ${Math.round(node.battery)}% — replace soon`,
-  );
-  check(
-    node.rssi != null && node.rssi < RULES.rssiMin,
-    "rssi",
-    "info",
-    `Weak signal ${Math.round(node.rssi)} dBm`,
-  );
-  check(
-    l.light != null && l.light < RULES.lightMin,
-    "light",
-    "warning",
-    `Light ${Math.round(l.light)} lux below ${RULES.lightMin}`,
-  );
 }
 
 /* ----------------------- mock MQTT generator ---------------------- */
@@ -502,7 +432,7 @@ let msgSeq = 0;
 
 function makeReading(node) {
   const b = node.base;
-  // random walk around baseline; kitchen drifts warm to demo an alert
+  // Random walk around baseline; kitchen drifts warm to exercise chart scale.
   b.t = clamp(b.t + rnd(-0.25, node.warmDrift ? 0.4 : 0.25), 16, 31);
   b.h = clamp(b.h + rnd(-0.7, 0.7), 28, 70);
   if (b.l != null) b.l = clamp(b.l + rnd(-50, 50), 0, 100000);
@@ -602,4 +532,4 @@ export function stopFeed() {
   store.connected = false;
 }
 
-export const config = { WINDOW, TICK_MS, RULES };
+export const config = { WINDOW, TICK_MS };

@@ -7,7 +7,6 @@
   import TopBar from '$lib/components/TopBar.svelte';
   import OverviewStrip from '$lib/components/OverviewStrip.svelte';
   import SignalChart from '$lib/components/SignalChart.svelte';
-  import AlertsPanel from '$lib/components/AlertsPanel.svelte';
   import IngestionMetrics from '$lib/components/IngestionMetrics.svelte';
   import NodeTable from '$lib/components/NodeTable.svelte';
   import NodeDetails from '$lib/components/NodeDetails.svelte';
@@ -176,8 +175,7 @@
       </section>
 
       <div class="support-grid">
-        <div class="panel-bare" style:--stagger="8"><AlertsPanel /></div>
-        <div class="panel-bare" style:--stagger="9"><IngestionMetrics /></div>
+        <div class="panel-bare" style:--stagger="8"><IngestionMetrics /></div>
       </div>
     </section>
   </div>
@@ -254,7 +252,7 @@
   }
   .support-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--gap);
   }
   .panel,
@@ -330,12 +328,6 @@
     text-align: center;
     padding: 8px 0 4px;
     line-height: 1.7;
-  }
-  .foot code {
-    color: var(--text-dim);
-  }
-  .sep {
-    margin: 0 6px;
   }
   @keyframes rise {
     from {

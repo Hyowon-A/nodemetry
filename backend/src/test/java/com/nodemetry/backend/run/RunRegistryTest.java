@@ -26,7 +26,7 @@ class RunRegistryTest {
     private static final long LONG_GRACE_MS = 60_000;
 
     @Mock
-    private TestRunRepository repository;
+    private VirtualNodeRunRepository repository;
 
     @Mock
     private NodeService nodeService;
@@ -105,20 +105,20 @@ class RunRegistryTest {
 
     @Test
     void endRunStampsDbReconciledTotalsAndStoresQueuedTotal() {
-        when(repository.save(any(TestRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(VirtualNodeRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         registry.startRun(new StartRunRequest("run-001", "Load test", 1, 3, 0.5, 0.1));
         registry.recordSaved("run-001", 141);
         registry.recordDupe("run-001", 95);
 
-        TestRun run = new TestRun();
+        VirtualNodeRun run = new VirtualNodeRun();
         run.setRunId("run-001");
         run.setStartedAt(Instant.now());
         run.setTotalSaved(99); // stale row value — must be overwritten from the DB count
         when(repository.findByRunId("run-001")).thenReturn(Optional.of(run));
         when(readingRepository.countByRunId("run-001")).thenReturn(236L);
 
-        TestRun ended = registry.endRun("run-001", new EndRunRequest(236L, 1_700_000_000_000L));
+        VirtualNodeRun ended = registry.endRun("run-001", new EndRunRequest(236L, 1_700_000_000_000L));
 
         assertThat(ended.getTotalReceived()).isEqualTo(236);
         assertThat(ended.getTotalSaved()).isEqualTo(236);
@@ -129,9 +129,9 @@ class RunRegistryTest {
 
     @Test
     void lateBatchesKeepSettlingDuringGraceWindowAfterEnd() {
-        when(repository.save(any(TestRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(VirtualNodeRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        TestRun run = new TestRun();
+        VirtualNodeRun run = new VirtualNodeRun();
         run.setRunId("run-001");
         run.setStartedAt(Instant.now());
         when(repository.findByRunId("run-001")).thenReturn(Optional.of(run));
@@ -141,7 +141,7 @@ class RunRegistryTest {
 
         // Only part of the run has been ingested when the run ends.
         when(readingRepository.countByRunId("run-001")).thenReturn(141L, 236L);
-        TestRun ended = registry.endRun("run-001", new EndRunRequest(236L, 1_700_000_000_000L));
+        VirtualNodeRun ended = registry.endRun("run-001", new EndRunRequest(236L, 1_700_000_000_000L));
         assertThat(ended.getTotalSaved()).isEqualTo(141);
 
         // The remaining batches drain after the end; the grace-window flush
@@ -156,9 +156,9 @@ class RunRegistryTest {
     void endedRunIsEvictedAfterGraceAndLateEventsAreIgnored() {
         registry = new RunRegistry(repository, nodeService, readingRepository, 0);
 
-        when(repository.save(any(TestRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(VirtualNodeRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        TestRun run = new TestRun();
+        VirtualNodeRun run = new VirtualNodeRun();
         run.setRunId("run-001");
         run.setStartedAt(Instant.now());
         when(repository.findByRunId("run-001")).thenReturn(Optional.of(run));
@@ -167,7 +167,7 @@ class RunRegistryTest {
         registry.recordSaved("run-001");
         when(readingRepository.countByRunId("run-001")).thenReturn(1L);
 
-        TestRun ended = registry.endRun("run-001", new EndRunRequest(1L, 1_700_000_000_000L));
+        VirtualNodeRun ended = registry.endRun("run-001", new EndRunRequest(1L, 1_700_000_000_000L));
         assertThat(ended.getTotalSaved()).isEqualTo(1);
         assertThat(ended.getDuplicatesSkipped()).isZero();
 

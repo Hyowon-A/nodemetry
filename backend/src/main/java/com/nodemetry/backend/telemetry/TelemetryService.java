@@ -30,7 +30,7 @@ public class TelemetryService {
     // hot path per message.
     @Transactional
     public void processTelemetry(TelemetryMessage message) {
-        validate(message);
+        TelemetryMessageValidator.requireValid(message);
 
         // Reuse the existing node, or create it on first telemetry
         SensorNode node = nodeRepository
@@ -74,21 +74,4 @@ public class TelemetryService {
         );
     }
 
-    private void validate(TelemetryMessage message) {
-        if (message.messageId() == null || message.messageId().isBlank()) {
-            throw new IllegalArgumentException("messageId is required");
-        }
-
-        if (message.nodeId() == null || message.nodeId().isBlank()) {
-            throw new IllegalArgumentException("nodeId is required");
-        }
-
-        if (message.runId() == null || message.runId().isBlank()) {
-            throw new IllegalArgumentException("runId is required");
-        }
-
-        if (message.firmwareVersion() == null || message.firmwareVersion().isBlank()) {
-            throw new IllegalArgumentException("firmwareVersion is required");
-        }
-    }
 }

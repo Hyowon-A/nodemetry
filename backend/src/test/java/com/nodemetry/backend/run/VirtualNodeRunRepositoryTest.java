@@ -12,10 +12,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
 @ActiveProfiles("test")
-class TestRunRepositoryTest {
+class VirtualNodeRunRepositoryTest {
 
     @Autowired
-    private TestRunRepository repository;
+    private VirtualNodeRunRepository repository;
 
     @Autowired
     private EntityManager entityManager;
@@ -27,7 +27,7 @@ class TestRunRepositoryTest {
         assertThat(repository.updateCounters("run-001", 5, 2)).isEqualTo(1);
         entityManager.clear();
 
-        TestRun updated = repository.findByRunId("run-001").orElseThrow();
+        VirtualNodeRun updated = repository.findByRunId("run-001").orElseThrow();
         assertThat(updated.getTotalReceived()).isZero();
         assertThat(updated.getTotalSaved()).isEqualTo(5);
         assertThat(updated.getDuplicatesSkipped()).isEqualTo(2);
@@ -38,7 +38,7 @@ class TestRunRepositoryTest {
         // RunRegistry keeps reconciling for a grace window after a run ends so
         // late batches settle into the final totals; the write must not be
         // blocked by endedAt being set.
-        TestRun run = run("run-001", Instant.now());
+        VirtualNodeRun run = run("run-001", Instant.now());
         run.setTotalSaved(4);
         run.setDuplicatesSkipped(1);
         repository.saveAndFlush(run);
@@ -46,13 +46,13 @@ class TestRunRepositoryTest {
         assertThat(repository.updateCounters("run-001", 7, 3)).isEqualTo(1);
         entityManager.clear();
 
-        TestRun updated = repository.findByRunId("run-001").orElseThrow();
+        VirtualNodeRun updated = repository.findByRunId("run-001").orElseThrow();
         assertThat(updated.getTotalSaved()).isEqualTo(7);
         assertThat(updated.getDuplicatesSkipped()).isEqualTo(3);
     }
 
-    private TestRun run(String runId, Instant endedAt) {
-        TestRun run = new TestRun();
+    private VirtualNodeRun run(String runId, Instant endedAt) {
+        VirtualNodeRun run = new VirtualNodeRun();
         run.setRunId(runId);
         run.setLabel("Load test");
         run.setStartedAt(Instant.now());

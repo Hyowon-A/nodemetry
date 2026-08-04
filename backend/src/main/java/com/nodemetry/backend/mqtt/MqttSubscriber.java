@@ -3,12 +3,15 @@ package com.nodemetry.backend.mqtt;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.eclipse.paho.client.mqttv3.*;
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @ConditionalOnProperty(prefix = "mqtt", name = "enabled", havingValue = "true")
 public class MqttSubscriber {
+
+    private static final int LOG_VALUE_LIMIT = 160;
 
     private final MqttProperties properties;
     private final MqttMessageHandler messageHandler;
@@ -22,7 +25,7 @@ public class MqttSubscriber {
     @PostConstruct
     public void connectAndSubscribe() {
         try {
-            client = new MqttClient(properties.getBrokerUri(), properties.getClientId());
+            client = new MqttClient(properties.getBrokerUri(), properties.getClientId(), new MemoryPersistence());
 
             MqttConnectOptions options = new MqttConnectOptions();
             options.setUserName(properties.getUsername());
@@ -62,8 +65,8 @@ public class MqttSubscriber {
                     } else if (topic.endsWith("/status")) {
                         messageHandler.handleStatus(topic, payload, message.isRetained());
                     } else {
-                        System.out.println("Unknown topic: " + topic);
-                        System.out.println(payload);
+                        System.out.println("Unknown topic: " + safeLogValue(topic));
+                        System.out.println("Payload chars: " + payload.length());
                     }
                 }
 
@@ -98,5 +101,15 @@ public class MqttSubscriber {
         } catch (MqttException e) {
             System.err.println("Failed to disconnect MQTT client: " + e.getMessage());
         }
+    }
+
+    private String safeLogValue(String value) {
+        if (value == null) {
+            return "";
+        }
+        String sanitized = value.replaceAll("[\\r\\n\\t\\p{Cntrl}]", "?");
+        return sanitized.length() <= LOG_VALUE_LIMIT
+                ? sanitized
+                : sanitized.substring(0, LOG_VALUE_LIMIT) + "...";
     }
 }
