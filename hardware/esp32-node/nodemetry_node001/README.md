@@ -4,7 +4,7 @@
 
 Describe the completed ESP32 sensor node and how the components are arranged.
 
-![Final hardware setup](image.png)!
+![Final hardware setup](images/image.png)
 
 ## 2. Hardware Components and Sensor Selection
 
@@ -29,7 +29,6 @@ Both sensors use I2C and share the same SDA and SCL lines.
 | BH1750 | SDA | GPIO 21 |
 | BH1750 | SCL | GPIO 22 |
 
-![ESP32 sensor wiring](images/esp32-wiring.jpg)
 
 ## 4. Raw Versus Filtered Sensor Results
 
@@ -45,7 +44,7 @@ dashboard graphs easier to read and helps users identify the overall trend.
 
 ### Temperature Results
 
-![Raw and filtered temperature results](image-3.png)
+![Raw and filtered temperature results](images/image-3.png)
 
 During the test, the raw temperature remained approximately between 23.9 °C and
 24.2 °C. The raw line contained several small and rapid changes between
@@ -58,7 +57,7 @@ the recorded temperature.
 
 ### Humidity Results
 
-![Raw and filtered humidity results](image-1.png)
+![Raw and filtered humidity results](images/image-1.png)
 
 The raw humidity readings fluctuated more noticeably than the temperature
 readings, with values approximately between 44% and 52%.
@@ -70,7 +69,7 @@ easier to interpret.
 
 ### Light Results
 
-![Raw light sensor results](image-2.png)
+![Raw light sensor results](images/image-2.png)
 
 Only raw light readings were displayed during this test. The measured light
 level changed considerably because the BH1750 sensor responds directly to
@@ -144,7 +143,7 @@ sensor values and publishing telemetry successfully. The Serial Monitor
 repeatedly displayed `Publish successful`, showing that the MQTT connection
 remained operational.
 
-![ESP32 publishing under normal Wi-Fi conditions](image-4.png)
+![ESP32 publishing under normal Wi-Fi conditions](images/image-4.png)
 
 The physical node therefore maintained stable telemetry transmission at RSSI
 values between approximately `-36 dBm` and `-66 dBm`. At `-76 dBm`, the signal
@@ -164,7 +163,7 @@ The Serial Monitor recorded a failed MQTT connection attempt:
 ```text
 Connecting to MQTT... failed, MQTT state=-2 - retrying in 5 seconds
 ```
-![Wifi break](image-5.png)
+![Wifi break](images/image-5.png)
 
 ### MQTT QoS 0 Versus QoS 1 Test
 
@@ -251,9 +250,9 @@ A short video was recorded showing:
 - the completed ESP32 node;
 - live sensor readings in the Serial Monitor;
 - MQTT connection;
-- readings appearing on the dashboard;
+- readings appearing on the dashboard
 
-[View the hardware demonstration](videos/hardware-demo.mp4)
+<video controls src="videos/hardware-demo.mp4" title="Title"></video>
 
 ## 7. Key Findings
 
