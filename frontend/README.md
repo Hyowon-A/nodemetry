@@ -28,20 +28,22 @@ npm run preview
 
 ## Environment Variables
 
-Browser-facing values go in `frontend/.env`; use `.env.example` as the
-template:
+Use `.env.example` as the template for `frontend/.env`:
 
 ```text
 PUBLIC_API_BASE=http://localhost:8080
 PUBLIC_WS_URL=ws://localhost:8080/ws
 PUBLIC_INCLUDE_VNODES=true
 PUBLIC_USE_MOCK=false
+HTTP_API_WRITE_TOKEN=change-me
 ```
 
+`PUBLIC_*` values are bundled into browser code, so do not put secrets there.
 `PUBLIC_USE_MOCK=false` connects the dashboard to the live backend; when it is
 omitted or set to another value, the dashboard uses its local mock feed.
-`PUBLIC_INCLUDE_VNODES` is optional and mainly useful in development. Do not put
-secrets in `PUBLIC_` variables because they are bundled into browser code.
+`PUBLIC_INCLUDE_VNODES` is optional and mainly useful in development.
+`HTTP_API_WRITE_TOKEN` is server-only and is used by the dev simulator endpoint
+when it registers runs with a token-gated backend.
 
 ## Main Routes
 
@@ -107,8 +109,8 @@ not available.
 - Choose and configure an explicit SvelteKit adapter if `adapter-auto` cannot
   detect the deployment platform.
 - Keep `/api/simulator` production-disabled; it is intentionally dev-only.
-- The backend production HTTP API is read-only by default, so deployed frontend
-  code should not rely on simulator start/stop writes.
+- Set `HTTP_API_WRITE_TOKEN` on the server when dev simulator controls write to
+  a deployed backend.
 
 ## Project Layout
 

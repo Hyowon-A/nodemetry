@@ -18,6 +18,7 @@ const defaultOptions = {
 };
 
 const API_BASE = process.env.PUBLIC_API_BASE || 'http://localhost:8080';
+const API_WRITE_TOKEN = process.env.HTTP_API_WRITE_TOKEN || '';
 const STOP_TIMEOUT_MS = 15000;
 const RUN_ID_TIMEOUT_MS = 5000;
 const WARMUP_READY_TIMEOUT_MS = 120000;
@@ -32,6 +33,13 @@ let currentRunId = null;
 let registeredRunId = null;
 let endingRunId = null;
 let endPromise = null;
+
+function apiHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    ...(API_WRITE_TOKEN ? { 'X-API-Key': API_WRITE_TOKEN } : {})
+  };
+}
 
 function isChildRunning(child) {
   return child !== null && child.exitCode === null && child.signalCode === null;
@@ -140,7 +148,7 @@ async function endCurrentRun() {
     try {
       await fetch(`${API_BASE}/api/v1/runs/${runId}/end`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: apiHeaders(),
         body: JSON.stringify(endRunPayload())
       });
     } catch (e) {
@@ -324,7 +332,7 @@ function waitForWarmupReady(child) {
 async function registerRun(runId, label) {
   const res = await fetch(`${API_BASE}/api/v1/runs`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: apiHeaders(),
     body: JSON.stringify({
       runId,
       label,
@@ -334,9 +342,14 @@ async function registerRun(runId, label) {
       duplicateRate: currentOptions.duplicateRate
     })
   });
+  if ([401, 403].includes(res.status)) {
+    appendLog('Backend API is read-only; MQTT ingest will create the virtual run row.\n');
+    return false;
+  }
   if (!res.ok) {
     throw new Error(`Failed to register run (${res.status})`);
   }
+  return true;
 }
 
 async function beginMeasurementAfterWarmup(child, runId, label) {
@@ -344,8 +357,7 @@ async function beginMeasurementAfterWarmup(child, runId, label) {
     await waitForWarmupReady(child);
     if (processHandle !== child || !isChildRunning(child)) return;
 
-    await registerRun(runId, label);
-    registeredRunId = runId;
+    registeredRunId = (await registerRun(runId, label)) ? runId : null;
     if (!warming || processHandle !== child || !isChildRunning(child)) {
       await endCurrentRun();
       return;
