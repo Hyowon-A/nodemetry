@@ -46,9 +46,13 @@ telemetry:
 
 app:
   http-api:
-    read-only: ${HTTP_API_READ_ONLY:false}
+    write-token: ${HTTP_API_WRITE_TOKEN:}
   frontend:
     allowed-origins: ${FRONTEND_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+
+run:
+  metrics:
+    virtual-node-prefixes: ${RUN_METRICS_VIRTUAL_NODE_PREFIXES:vnode-}
 
 ---
 spring:
@@ -58,4 +62,4 @@ spring:
 
 app:
   http-api:
-    read-only: ${HTTP_API_READ_ONLY:true}
+    write-token: ${HTTP_API_WRITE_TOKEN:}

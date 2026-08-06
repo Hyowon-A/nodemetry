@@ -1,69 +1,33 @@
 package com.nodemetry.backend.mqtt;
 
-import io.github.cdimascio.dotenv.Dotenv;
-import org.springframework.stereotype.Component;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 
-@Component
-public class MqttProperties {
+@ConfigurationProperties(prefix = "mqtt")
+public record MqttProperties(
+        String host,
+        int port,
+        String username,
+        String password,
+        String clientId,
+        String telemetryTopic,
+        String statusTopic
+) {
 
-    private final Dotenv dotenv = Dotenv.configure()
-            .directory(".")
-            .ignoreIfMissing()
-            .load();
-
-    public String getHost() {
-        return get("MQTT_HOST");
+    public MqttProperties {
+        host = required(host, "mqtt.host");
+        username = required(username, "mqtt.username");
+        password = required(password, "mqtt.password");
+        clientId = defaultIfBlank(clientId, "nodemetry-backend-local");
+        telemetryTopic = defaultIfBlank(telemetryTopic, "nodemetry/+/telemetry");
+        statusTopic = defaultIfBlank(statusTopic, "nodemetry/+/status");
     }
 
-    public int getPort() {
-        return Integer.parseInt(getOrDefault("MQTT_PORT", "8883"));
-    }
-
-    public String getUsername() {
-        return get("MQTT_USERNAME");
-    }
-
-    public String getPassword() {
-        return get("MQTT_PASSWORD");
-    }
-
-    public String getClientId() {
-        return getOrDefault("MQTT_CLIENT_ID", "nodemetry-backend-local");
-    }
-
-    public String getTelemetryTopic() {
-        return "nodemetry/+/telemetry";
-    }
-
-    public String getStatusTopic() {
-        return "nodemetry/+/status";
-    }
-
-    public String getBrokerUri() {
-        return "ssl://" + getHost() + ":" + getPort();
-    }
-
-    private String get(String key) {
-        String value = dotenv.get(key);
-
-        if (value == null || value.isBlank()) {
-            value = System.getenv(key);
-        }
-
-        if (value == null || value.isBlank()) {
-            throw new IllegalStateException("Missing required environment variable: " + key);
-        }
-
+    private static String required(String value, String name) {
+        if (value == null || value.isBlank()) throw new IllegalStateException("Missing required property: " + name);
         return value;
     }
 
-    private String getOrDefault(String key, String defaultValue) {
-        String value = dotenv.get(key);
-
-        if (value == null || value.isBlank()) {
-            value = System.getenv(key);
-        }
-
-        return value == null || value.isBlank() ? defaultValue : value;
+    private static String defaultIfBlank(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 }

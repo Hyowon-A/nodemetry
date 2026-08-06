@@ -15,7 +15,9 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.doubleThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
@@ -24,6 +26,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 class TelemetryBatchIngestServiceTest {
 
@@ -40,6 +43,8 @@ class TelemetryBatchIngestServiceTest {
         messagingTemplate = mock(SimpMessagingTemplate.class);
         runRegistry = mock(RunRegistry.class);
         physicalNodeRunRegistry = mock(PhysicalNodeRunRegistry.class);
+        when(physicalNodeRunRegistry.isPhysicalNode(anyString()))
+                .thenAnswer(invocation -> !invocation.getArgument(0, String.class).startsWith("vnode-"));
         service = new TelemetryBatchIngestService(
                 jdbcTemplate,
                 new TransactionTemplate(new DataSourceTransactionManager(dataSource)),
@@ -96,10 +101,10 @@ class TelemetryBatchIngestServiceTest {
                 Double.class
         )).isEqualTo(76.0);
 
-        verify(runRegistry).recordSaved("run-001", 2L);
-        verify(runRegistry, never()).recordDupe(any(), anyLong());
         verify(physicalNodeRunRegistry).recordBatch(
                 eq("run-001"), eq("node-001"), eq(2L), eq(0L), doubleThat(ms -> ms > 0));
+        verify(runRegistry, never()).recordVirtualSaved(any(), anyLong());
+        verify(runRegistry, never()).recordVirtualDupe(any(), anyLong());
         verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/nodes/node-001/latest"), any(SensorReadingResponse.class));
         verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/readings"), any(SensorReadingResponse.class));
     }
@@ -112,8 +117,6 @@ class TelemetryBatchIngestServiceTest {
         assertThat(service.drainOnce()).isEqualTo(2);
 
         assertThat(count("sensor_readings")).isEqualTo(1);
-        verify(runRegistry).recordSaved("run-001", 1L);
-        verify(runRegistry).recordDupe("run-001", 1L);
         verify(physicalNodeRunRegistry).recordBatch(
                 eq("run-001"), eq("node-001"), eq(1L), eq(1L), doubleThat(ms -> ms > 0));
     }
@@ -130,11 +133,21 @@ class TelemetryBatchIngestServiceTest {
         assertThat(service.drainOnce()).isEqualTo(1);
 
         assertThat(count("sensor_readings")).isEqualTo(1);
-        verify(runRegistry, never()).recordSaved(any(), anyLong());
-        verify(runRegistry).recordDupe("run-001", 1L);
         verify(physicalNodeRunRegistry).recordBatch(
                 eq("run-001"), eq("node-001"), eq(0L), eq(1L), doubleThat(ms -> ms > 0));
         verifyNoInteractions(messagingTemplate);
+    }
+
+    @Test
+    void virtualNodesRecordVirtualRunCounters() {
+        service.enqueue(message("message-001", "vnode-0001", "run-001", 87.0));
+        service.enqueue(message("message-001", "vnode-0001", "run-001", 87.0));
+
+        assertThat(service.drainOnce()).isEqualTo(2);
+
+        verify(runRegistry).recordVirtualSaved("run-001", 1L);
+        verify(runRegistry).recordVirtualDupe("run-001", 1L);
+        verify(physicalNodeRunRegistry, never()).recordBatch(any(), any(), anyLong(), anyLong(), anyDouble());
     }
 
     @Test

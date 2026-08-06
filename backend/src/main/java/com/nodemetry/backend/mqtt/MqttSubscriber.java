@@ -25,11 +25,12 @@ public class MqttSubscriber {
     @PostConstruct
     public void connectAndSubscribe() {
         try {
-            client = new MqttClient(properties.getBrokerUri(), properties.getClientId(), new MemoryPersistence());
+            String brokerUri = "ssl://" + properties.host() + ":" + properties.port();
+            client = new MqttClient(brokerUri, properties.clientId(), new MemoryPersistence());
 
             MqttConnectOptions options = new MqttConnectOptions();
-            options.setUserName(properties.getUsername());
-            options.setPassword(properties.getPassword().toCharArray());
+            options.setUserName(properties.username());
+            options.setPassword(properties.password().toCharArray());
             options.setAutomaticReconnect(true);
             options.setCleanSession(true);
             options.setConnectionTimeout(10);
@@ -47,8 +48,8 @@ public class MqttSubscriber {
                     // connected yet silently deaf to every topic.
                     if (reconnect) {
                         try {
-                            client.subscribe(properties.getTelemetryTopic(), 1);
-                            client.subscribe(properties.getStatusTopic(), 1);
+                            client.subscribe(properties.telemetryTopic(), 1);
+                            client.subscribe(properties.statusTopic(), 1);
                             System.out.println("Resubscribed after MQTT reconnect: " + serverURI);
                         } catch (MqttException e) {
                             System.err.println("Failed to resubscribe after reconnect: " + e.getMessage());
@@ -78,12 +79,12 @@ public class MqttSubscriber {
 
             client.connect(options);
 
-            client.subscribe(properties.getTelemetryTopic(), 1);
-            client.subscribe(properties.getStatusTopic(), 1);
+            client.subscribe(properties.telemetryTopic(), 1);
+            client.subscribe(properties.statusTopic(), 1);
 
-            System.out.println("Connected to MQTT broker: " + properties.getBrokerUri());
-            System.out.println("Subscribed to: " + properties.getTelemetryTopic());
-            System.out.println("Subscribed to: " + properties.getStatusTopic());
+            System.out.println("Connected to MQTT broker: " + brokerUri);
+            System.out.println("Subscribed to: " + properties.telemetryTopic());
+            System.out.println("Subscribed to: " + properties.statusTopic());
 
         } catch (MqttException e) {
             throw new RuntimeException("Failed to connect to MQTT broker", e);

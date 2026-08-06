@@ -34,9 +34,16 @@ MQTT_PORT
 MQTT_TLS
 MQTT_USERNAME
 MQTT_PASSWORD
+BACKEND_API_BASE
+BACKEND_API_WRITE_TOKEN
 ```
 
 CLI flags override environment variables.
+Normal CLI runs register and end a virtual run through `BACKEND_API_BASE`
+(`http://localhost:8080` by default), so the run appears in backend run metrics.
+If the backend has `HTTP_API_WRITE_TOKEN` set, set `BACKEND_API_WRITE_TOKEN` to
+the same value.
+Frontend-controlled warmup mode leaves registration to the frontend API route.
 
 ## Basic Command
 
@@ -66,6 +73,8 @@ python simulator.py --nodes 100 --interval 10 --qos 1 --tls \
 | `--shared` | Multiplex many virtual nodes over fewer MQTT connections |
 | `--connections` | Number of shared MQTT connections |
 | `--start-gate-stdin` | Warm up connections, print `READY`, then wait for `start` on stdin |
+| `--api-base` | Backend API base used to record CLI runs |
+| `--api-token` | Backend write API token |
 
 ## Dedicated Mode
 

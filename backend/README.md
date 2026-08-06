@@ -37,7 +37,7 @@ Frontend and production behavior:
 
 ```text
 FRONTEND_ALLOWED_ORIGINS
-HTTP_API_READ_ONLY
+HTTP_API_WRITE_TOKEN
 ```
 
 Optional ingest tuning:
@@ -95,8 +95,8 @@ PATCH /api/v1/runs/{runId}/end
 GET   /api/v1/metrics/ingestion
 ```
 
-In production read-only mode, `/api/**` permits only `GET`, `HEAD`, and
-`OPTIONS`; HTTP write methods are rejected.
+REST reads are public. Write methods require `X-API-Key: $HTTP_API_WRITE_TOKEN`;
+leave the token unset or rotate it to freeze HTTP writes.
 
 ## API Documentation
 
@@ -138,7 +138,7 @@ com.nodemetry.backend
 ├── mqtt        MQTT properties, subscriber, message handler
 ├── node        Node entity, repository, health/status service
 ├── run         Virtual run registry and physical node run metrics
-└── telemetry   Reading entity, repositories, ingest services, controllers
+└── telemetry   Reading entity, repository, ingest service, controller
 ```
 
 ## Database Setup and Migrations
@@ -198,8 +198,8 @@ status task marks stale nodes offline and broadcasts status changes.
 ## Production Notes
 
 - The Docker image activates `SPRING_PROFILES_ACTIVE=prod`.
-- In `prod` or `production`, `HTTP_API_READ_ONLY` defaults to `true`.
-- MQTT ingestion is unaffected by HTTP read-only mode.
+- Writable HTTP API calls require `X-API-Key: $HTTP_API_WRITE_TOKEN`.
+- MQTT ingestion is unaffected by HTTP write-token settings.
 - REST reads and WebSocket access remain unauthenticated.
 - Configure `FRONTEND_ALLOWED_ORIGINS` for browser CORS and WebSocket origin
   checks.

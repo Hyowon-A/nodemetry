@@ -3,6 +3,7 @@ package com.nodemetry.backend.run;
 import com.nodemetry.backend.node.NodeService;
 import com.nodemetry.backend.telemetry.SensorReadingRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -19,8 +20,6 @@ public class RunRegistry {
     private final NodeService nodeService;
     private final SensorReadingRepository readingRepository;
     private final long endGraceMs;
-
-    private volatile String currentRunId;
 
     // Per-run event counters kept in memory so the single MQTT ingest thread can
     // record a save/dupe with a cheap LongAdder increment instead of a DB
@@ -65,12 +64,7 @@ public class RunRegistry {
         run.setDuplicateRate(req.duplicateRate());
         VirtualNodeRun savedRun = repository.save(run);
         counters.put(req.runId(), new RunCounters());
-        currentRunId = req.runId();
         return savedRun;
-    }
-
-    public synchronized VirtualNodeRun endRun(String runId) {
-        return endRun(runId, null);
     }
 
     public synchronized VirtualNodeRun endRun(String runId, EndRunRequest req) {
@@ -95,41 +89,48 @@ public class RunRegistry {
                 c.lastFlushedSaved = run.getTotalSaved();
                 c.lastFlushedDupes = run.getDuplicatesSkipped();
             }
-            if (runId.equals(currentRunId)) {
-                currentRunId = null;
-            }
             return repository.save(run);
         }).orElseThrow(() -> new IllegalArgumentException("Run not found: " + runId));
     }
 
-    public synchronized void recordSaved() {
-        recordSaved(currentRunId);
-    }
-
-    public synchronized void recordSaved(String runId) {
-        recordSaved(runId, 1);
-    }
-
-    public synchronized void recordSaved(String runId, long count) {
-        RunCounters c = runId == null ? null : counters.get(runId);
+    public synchronized void recordVirtualSaved(String runId, long count) {
+        RunCounters c = ensureVirtualRun(runId);
         if (c != null && count > 0) {
             c.saved.add(count);
         }
     }
 
-    public synchronized void recordDupe() {
-        recordDupe(currentRunId);
-    }
-
-    public synchronized void recordDupe(String runId) {
-        recordDupe(runId, 1);
-    }
-
-    public synchronized void recordDupe(String runId, long count) {
-        RunCounters c = runId == null ? null : counters.get(runId);
+    public synchronized void recordVirtualDupe(String runId, long count) {
+        RunCounters c = ensureVirtualRun(runId);
         if (c != null && count > 0) {
             c.dupes.add(count);
         }
+    }
+
+    private RunCounters ensureVirtualRun(String runId) {
+        if (runId == null || runId.isBlank()) {
+            return null;
+        }
+
+        RunCounters existing = counters.get(runId);
+        if (existing != null) {
+            return existing;
+        }
+
+        RunCounters fresh = new RunCounters();
+        counters.put(runId, fresh);
+        if (!repository.existsByRunId(runId)) {
+            VirtualNodeRun run = new VirtualNodeRun();
+            run.setRunId(runId);
+            run.setLabel("MQTT CLI run " + runId);
+            run.setStartedAt(Instant.now());
+            try {
+                repository.save(run);
+            } catch (DataIntegrityViolationException raced) {
+                // Another ingest instance created the same auto-run row.
+            }
+        }
+        return fresh;
     }
 
     // Mirror DB-reconciled totals into the VirtualNodeRun row roughly once a second so
@@ -154,7 +155,7 @@ public class RunRegistry {
 
             boolean changed = saved != c.lastFlushedSaved || dupes != c.lastFlushedDupes;
             if (changed) {
-                repository.updateCounters(runId, saved, dupes);
+                repository.updateCounters(runId, saved + dupes, saved, dupes);
                 c.lastFlushedSaved = saved;
                 c.lastFlushedDupes = dupes;
             }
@@ -164,6 +165,4 @@ public class RunRegistry {
             }
         }
     }
-
-    public String getCurrentRunId() { return currentRunId; }
 }

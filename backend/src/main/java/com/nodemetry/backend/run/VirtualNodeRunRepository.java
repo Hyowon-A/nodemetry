@@ -23,8 +23,13 @@ public interface VirtualNodeRunRepository extends JpaRepository<VirtualNodeRun, 
     @Modifying
     @Query("""
             update VirtualNodeRun r
-            set r.totalSaved = :saved, r.duplicatesSkipped = :dupes
+            set r.totalReceived = :received, r.totalSaved = :saved, r.duplicatesSkipped = :dupes
             where r.runId = :runId
             """)
-    int updateCounters(@Param("runId") String runId, @Param("saved") long saved, @Param("dupes") long dupes);
+    int updateCounters(
+            @Param("runId") String runId,
+            @Param("received") long received,
+            @Param("saved") long saved,
+            @Param("dupes") long dupes
+    );
 }

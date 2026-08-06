@@ -46,29 +46,28 @@ class RunRegistryTest {
         registry.startRun(new StartRunRequest("run-001", "Load test", 1, 3, 0.5, 0.1));
         verify(nodeService).markAllKnownNodesOffline();
 
-        registry.recordSaved("run-001");
-        registry.recordSaved("run-001");
-        registry.recordDupe("run-001");
+        registry.recordVirtualSaved("run-001", 2);
+        registry.recordVirtualDupe("run-001", 1);
 
         // Recording alone touches no DB; the scheduled flush mirrors the totals.
-        verify(repository, never()).updateCounters(anyString(), anyLong(), anyLong());
+        verify(repository, never()).updateCounters(anyString(), anyLong(), anyLong(), anyLong());
 
         when(readingRepository.countByRunId("run-001")).thenReturn(2L);
         registry.flushCounters();
-        verify(repository).updateCounters("run-001", 2, 1);
+        verify(repository).updateCounters("run-001", 3, 2, 1);
 
         // A second flush with no new counts writes nothing further.
         registry.flushCounters();
-        verify(repository, times(1)).updateCounters(anyString(), anyLong(), anyLong());
+        verify(repository, times(1)).updateCounters(anyString(), anyLong(), anyLong(), anyLong());
     }
 
     @Test
-    void recordCountersSkipWhenNoRunIsActive() {
-        registry.recordSaved();
-        registry.recordDupe();
+    void recordCountersSkipBlankRunId() {
+        registry.recordVirtualSaved(null, 1);
+        registry.recordVirtualDupe("", 1);
         registry.flushCounters();
 
-        verify(repository, never()).updateCounters(anyString(), anyLong(), anyLong());
+        verify(repository, never()).updateCounters(anyString(), anyLong(), anyLong(), anyLong());
     }
 
     // Regression test: another backend instance sharing the broker and database
@@ -79,13 +78,13 @@ class RunRegistryTest {
     void flushReportsDbTruthWhenAnotherInstanceSavedTheRows() {
         registry.startRun(new StartRunRequest("run-001", "Load test", 1, 10, 0.5, 0.0));
 
-        registry.recordSaved("run-001", 141);
-        registry.recordDupe("run-001", 95);
+        registry.recordVirtualSaved("run-001", 141);
+        registry.recordVirtualDupe("run-001", 95);
         when(readingRepository.countByRunId("run-001")).thenReturn(236L);
 
         registry.flushCounters();
 
-        verify(repository).updateCounters("run-001", 236, 0);
+        verify(repository).updateCounters("run-001", 236, 236, 0);
     }
 
     @Test
@@ -94,13 +93,13 @@ class RunRegistryTest {
 
         // 236 messages processed locally, 40 of them re-sent messageIds that
         // never produced a row.
-        registry.recordSaved("run-001", 196);
-        registry.recordDupe("run-001", 40);
+        registry.recordVirtualSaved("run-001", 196);
+        registry.recordVirtualDupe("run-001", 40);
         when(readingRepository.countByRunId("run-001")).thenReturn(196L);
 
         registry.flushCounters();
 
-        verify(repository).updateCounters("run-001", 196, 40);
+        verify(repository).updateCounters("run-001", 236, 196, 40);
     }
 
     @Test
@@ -108,8 +107,8 @@ class RunRegistryTest {
         when(repository.save(any(VirtualNodeRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         registry.startRun(new StartRunRequest("run-001", "Load test", 1, 3, 0.5, 0.1));
-        registry.recordSaved("run-001", 141);
-        registry.recordDupe("run-001", 95);
+        registry.recordVirtualSaved("run-001", 141);
+        registry.recordVirtualDupe("run-001", 95);
 
         VirtualNodeRun run = new VirtualNodeRun();
         run.setRunId("run-001");
@@ -124,7 +123,6 @@ class RunRegistryTest {
         assertThat(ended.getTotalSaved()).isEqualTo(236);
         assertThat(ended.getDuplicatesSkipped()).isZero();
         assertThat(ended.getEndedAt()).isEqualTo(Instant.ofEpochMilli(1_700_000_000_000L));
-        assertThat(registry.getCurrentRunId()).isNull();
     }
 
     @Test
@@ -137,7 +135,7 @@ class RunRegistryTest {
         when(repository.findByRunId("run-001")).thenReturn(Optional.of(run));
 
         registry.startRun(new StartRunRequest("run-001", "Load test", 1, 3, 0.5, 0.1));
-        registry.recordSaved("run-001", 141);
+        registry.recordVirtualSaved("run-001", 141);
 
         // Only part of the run has been ingested when the run ends.
         when(readingRepository.countByRunId("run-001")).thenReturn(141L, 236L);
@@ -146,10 +144,10 @@ class RunRegistryTest {
 
         // The remaining batches drain after the end; the grace-window flush
         // settles them into the run-history row.
-        registry.recordSaved("run-001", 95);
+        registry.recordVirtualSaved("run-001", 95);
         registry.flushCounters();
 
-        verify(repository).updateCounters("run-001", 236, 0);
+        verify(repository).updateCounters("run-001", 236, 236, 0);
     }
 
     @Test
@@ -164,7 +162,7 @@ class RunRegistryTest {
         when(repository.findByRunId("run-001")).thenReturn(Optional.of(run));
 
         registry.startRun(new StartRunRequest("run-001", "Load test", 1, 3, 0.5, 0.1));
-        registry.recordSaved("run-001");
+        registry.recordVirtualSaved("run-001", 1);
         when(readingRepository.countByRunId("run-001")).thenReturn(1L);
 
         VirtualNodeRun ended = registry.endRun("run-001", new EndRunRequest(1L, 1_700_000_000_000L));
@@ -173,12 +171,18 @@ class RunRegistryTest {
 
         // Grace of zero: the next flush reconciles once more and evicts the run.
         registry.flushCounters();
-        verify(repository, never()).updateCounters(anyString(), anyLong(), anyLong());
+        verify(repository, never()).updateCounters(anyString(), anyLong(), anyLong(), anyLong());
+    }
 
-        // Once evicted, the entry cannot be recreated by a late message for the
-        // same runId and the row is no longer touched.
-        registry.recordSaved("run-001");
+    @Test
+    void virtualTelemetryAutoCreatesRunWhenHttpRegistrationIsSkipped() {
+        when(repository.save(any(VirtualNodeRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(readingRepository.countByRunId("run-cli")).thenReturn(2L);
+
+        registry.recordVirtualSaved("run-cli", 2);
         registry.flushCounters();
-        verify(repository, never()).updateCounters(anyString(), anyLong(), anyLong());
+
+        verify(repository).save(any(VirtualNodeRun.class));
+        verify(repository).updateCounters("run-cli", 2, 2, 0);
     }
 }

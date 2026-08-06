@@ -1,28 +1,25 @@
 package com.nodemetry.backend.config;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 
-import java.util.Arrays;
 import java.util.List;
 
-@Component
-public class FrontendProperties {
+@ConfigurationProperties(prefix = "app.frontend")
+public record FrontendProperties(List<String> allowedOrigins) {
 
-    private final List<String> allowedOrigins;
-
-    public FrontendProperties(@Value("${app.frontend.allowed-origins}") String allowedOrigins) {
-        this.allowedOrigins = Arrays.stream(allowedOrigins.split(","))
+    public FrontendProperties {
+        allowedOrigins = allowedOrigins == null
+                ? List.of()
+                : allowedOrigins.stream()
                 .map(String::trim)
                 .filter(origin -> !origin.isBlank())
                 .toList();
-
-        if (this.allowedOrigins.isEmpty()) {
-            throw new IllegalStateException("app.frontend.allowed-origins must include at least one origin");
-        }
     }
 
     public List<String> getAllowedOrigins() {
+        if (allowedOrigins.isEmpty()) {
+            throw new IllegalStateException("app.frontend.allowed-origins must include at least one origin");
+        }
         return allowedOrigins;
     }
 }

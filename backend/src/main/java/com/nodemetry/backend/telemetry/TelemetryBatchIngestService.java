@@ -14,6 +14,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -107,7 +108,7 @@ public class TelemetryBatchIngestService {
         Map<NodeRunKey, Long> dupesByRunNode = new LinkedHashMap<>();
 
         for (TelemetryMessage message : rawBatch) {
-            if (isValid(message)) {
+            if (TelemetryMessageValidator.isValid(message)) {
                 Instant now = Instant.now();
                 QueuedReading reading = new QueuedReading(message, now, now);
                 if (uniqueByMessageId.putIfAbsent(message.messageId(), reading) != null) {
@@ -234,16 +235,13 @@ public class TelemetryBatchIngestService {
             return Set.of();
         }
 
-        StringBuilder sql = new StringBuilder("select message_id from sensor_readings where message_id in (");
+        StringBuilder sql = new StringBuilder("select message_id from sensor_readings where message_id in (")
+                .append(String.join(", ", Collections.nCopies(readings.size(), "?")))
+                .append(")");
         Object[] params = new Object[readings.size()];
         for (int i = 0; i < readings.size(); i++) {
-            if (i > 0) {
-                sql.append(", ");
-            }
-            sql.append("?");
             params[i] = readings.get(i).message().messageId();
         }
-        sql.append(")");
 
         return new LinkedHashSet<>(jdbcTemplate.queryForList(sql.toString(), String.class, params));
     }
@@ -282,24 +280,22 @@ public class TelemetryBatchIngestService {
     }
 
     private void recordRunCounters(BatchResult result, double perMessageMs) {
-        result.savedByRunId().forEach(runRegistry::recordSaved);
-        result.dupesByRunId().forEach(runRegistry::recordDupe);
-
         Set<NodeRunKey> keys = new LinkedHashSet<>(result.savedByRunNode().keySet());
         keys.addAll(result.dupesByRunNode().keySet());
+        Map<String, Long> virtualSavedByRunId = new LinkedHashMap<>();
+        Map<String, Long> virtualDupesByRunId = new LinkedHashMap<>();
         for (NodeRunKey key : keys) {
-            physicalNodeRunRegistry.recordBatch(
-                    key.runId(),
-                    key.nodeId(),
-                    result.savedByRunNode().getOrDefault(key, 0L),
-                    result.dupesByRunNode().getOrDefault(key, 0L),
-                    perMessageMs
-            );
+            long saved = result.savedByRunNode().getOrDefault(key, 0L);
+            long dupes = result.dupesByRunNode().getOrDefault(key, 0L);
+            if (physicalNodeRunRegistry.isPhysicalNode(key.nodeId())) {
+                physicalNodeRunRegistry.recordBatch(key.runId(), key.nodeId(), saved, dupes, perMessageMs);
+            } else {
+                virtualSavedByRunId.merge(key.runId(), saved, Long::sum);
+                virtualDupesByRunId.merge(key.runId(), dupes, Long::sum);
+            }
         }
-    }
-
-    private boolean isValid(TelemetryMessage message) {
-        return TelemetryMessageValidator.isValid(message);
+        virtualSavedByRunId.forEach(runRegistry::recordVirtualSaved);
+        virtualDupesByRunId.forEach(runRegistry::recordVirtualDupe);
     }
 
     private record QueuedReading(

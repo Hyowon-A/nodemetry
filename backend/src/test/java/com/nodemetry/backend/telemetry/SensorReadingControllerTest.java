@@ -12,7 +12,6 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -24,14 +23,11 @@ class SensorReadingControllerTest {
     @Mock
     private SensorReadingRepository readingRepository;
 
-    @Mock
-    private RunTelemetryService runTelemetryService;
-
     private SensorReadingController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new SensorReadingController(nodeRepository, readingRepository, runTelemetryService);
+        controller = new SensorReadingController(nodeRepository, readingRepository);
     }
 
     @Test
@@ -45,12 +41,14 @@ class SensorReadingControllerTest {
     }
 
     @Test
-    void getReadingsForNodeRunDelegatesToNodeRunService() {
-        List<SensorReadingResponse> expected = List.of();
+    void getReadingsForNodeRunReturnsRepositoryRows() {
         when(nodeRepository.existsByNodeId("node-001")).thenReturn(true);
-        when(runTelemetryService.getReadingsForNodeRun("node-001", "run-001")).thenReturn(expected);
+        when(readingRepository.findByNodeIdAndRunIdOrderByReceivedAtDesc("node-001", "run-001"))
+                .thenReturn(List.of(reading("message-002"), reading("message-001")));
 
-        assertThat(controller.getReadingsForNodeRun("node-001", "run-001")).isSameAs(expected);
+        assertThat(controller.getReadingsForNodeRun("node-001", "run-001"))
+                .extracting(SensorReadingResponse::messageId)
+                .containsExactly("message-002", "message-001");
     }
 
     @Test
@@ -60,6 +58,21 @@ class SensorReadingControllerTest {
         assertThatThrownBy(() -> controller.getReadingsForNodeRun("missing-node", "run-001"))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("Node not found: missing-node");
-        verifyNoInteractions(runTelemetryService);
+    }
+
+    private SensorReading reading(String messageId) {
+        return new SensorReading(
+                messageId,
+                "node-001",
+                "run-001",
+                23.5,
+                23.5,
+                48.2,
+                48.2,
+                87.0,
+                4200.0,
+                -62.0,
+                "firmware-1.0.0"
+        );
     }
 }
