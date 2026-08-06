@@ -38,6 +38,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from datetime import timezone
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from dotenv import load_dotenv
 
@@ -168,12 +169,8 @@ def status_payload(status):
 INTERNET_TIME_URL = "https://www.google.com/generate_204"
 
 
-def format_run_id_from_time_tuple(time_tuple):
-    return time.strftime("%Y%m%dT%H%M%SZ", time_tuple)
-
-
 def local_utc_run_id():
-    return format_run_id_from_time_tuple(time.gmtime())
+    return time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
 
 
 def internet_utc_run_id(timeout=3):
@@ -199,6 +196,68 @@ def default_run_id():
             file=sys.stderr,
         )
     return local_utc_run_id()
+
+
+def api_json(args, path, method, payload, warn=True):
+    if not args.api_base:
+        return None
+
+    url = args.api_base.rstrip("/") + path
+    headers = {"Content-Type": "application/json"}
+    if args.api_token:
+        headers["X-API-Key"] = args.api_token
+    data = json.dumps(payload).encode("utf-8")
+    request = Request(
+        url,
+        data=data,
+        headers=headers,
+        method=method,
+    )
+    try:
+        with urlopen(request, timeout=3) as response:
+            return response.status
+    except HTTPError as exc:
+        if warn:
+            print(f"warning: backend API {method} {path} failed: HTTP {exc.code}", file=sys.stderr)
+        return exc.code
+    except URLError as exc:
+        print(f"warning: backend API {method} {path} failed: {exc.reason}", file=sys.stderr)
+    except TimeoutError:
+        print(f"warning: backend API {method} {path} timed out", file=sys.stderr)
+    return None
+
+
+def register_backend_run(args):
+    mode = f"shared - {args.connections} connections" if args.shared else "dedicated"
+    status = api_json(
+        args,
+        "/api/v1/runs",
+        "POST",
+        {
+            "runId": args.run_id,
+            "label": f"{mode} - {args.interval}s interval - {args.duplicate_rate * 100:g}% duplicate rate",
+            "qos": args.qos,
+            "nodeCount": args.nodes,
+            "intervalSec": args.interval,
+            "duplicateRate": args.duplicate_rate,
+        },
+        warn=False,
+    )
+    if status == 403:
+        print("Backend API is read-only; MQTT ingest will create the virtual run row.", file=sys.stderr)
+    return status is not None and 200 <= status < 300
+
+
+def end_backend_run(args, total_queued):
+    api_json(
+        args,
+        f"/api/v1/runs/{args.run_id}/end",
+        "PATCH",
+        {
+            "totalReceived": total_queued,
+            "endedAtEpochMs": int(time.time() * 1000),
+        },
+    )
 
 
 def make_client(client_id, args):
@@ -333,23 +392,10 @@ def _publish_once(client, node, tele_topic, args):
 
 
 def build_nodes(args):
-    nodes = []
-    for i in range(1, args.nodes + 1):
-        nodes.append(
-            VirtualNode(
-                node_id=f"{args.node_prefix}-{i:04d}",
-                run_id=args.run_id,
-            )
-        )
-    return nodes
-
-
-def chunk(seq, parts):
-    parts = max(1, parts)
-    out = [[] for _ in range(parts)]
-    for i, item in enumerate(seq):
-        out[i % parts].append(item)
-    return [c for c in out if c]
+    return [
+        VirtualNode(node_id=f"{args.node_prefix}-{i:04d}", run_id=args.run_id)
+        for i in range(1, args.nodes + 1)
+    ]
 
 
 def parse_args():
@@ -397,18 +443,32 @@ def parse_args():
         action="store_true",
         help="connect clients, print READY, then wait for 'start' on stdin before publishing telemetry",
     )
+    p.add_argument(
+        "--api-base",
+        default=os.environ.get("BACKEND_API_BASE"),
+        help="backend API base for recording virtual runs (default: http://localhost:8080 unless --start-gate-stdin)",
+    )
+    p.add_argument(
+        "--api-token",
+        default=os.environ.get("BACKEND_API_WRITE_TOKEN"),
+        help="backend write API token",
+    )
     args = p.parse_args()
     if args.node_prefix is None:
         args.node_prefix = "test-node" if args.test else "vnode"
     if args.run_id is None:
         args.run_id = default_run_id()
+    if args.api_base is None and not args.start_gate_stdin:
+        args.api_base = "http://localhost:8080"
     return args
 
 
 def main():
     args = parse_args()
+    backend_run_registered = register_backend_run(args) if not args.start_gate_stdin else False
     nodes = build_nodes(args)
-    groups = chunk(nodes, args.connections) if args.shared else []
+    connections = max(1, args.connections)
+    groups = [nodes[i::connections] for i in range(min(connections, len(nodes)))] if args.shared else []
     expected_connections = len(groups) if args.shared else len(nodes)
     ready_gate = WarmupGate(expected_connections)
 
@@ -478,6 +538,8 @@ def main():
         for t in threads:
             t.join(timeout=5)
         queued, dup, fail = STATS.snapshot()
+        if backend_run_registered:
+            end_backend_run(args, queued)
         elapsed = max(1e-6, time.time() - start)
         print(
             f"\nDone. total_queued={queued} duplicates_queued={dup} "
