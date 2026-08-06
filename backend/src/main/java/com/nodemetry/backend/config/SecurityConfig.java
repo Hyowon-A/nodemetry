@@ -1,26 +1,42 @@
 package com.nodemetry.backend.config;
 
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.OncePerRequestFilter;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.List;
+import java.util.Set;
 
 @Configuration
 public class SecurityConfig {
 
-    private final FrontendProperties frontendProperties;
-    private final HttpApiProperties httpApiProperties;
+    private static final String API_KEY_HEADER = "X-API-Key";
+    private static final Set<String> SAFE_METHODS = Set.of("GET", "HEAD", "OPTIONS");
 
-    public SecurityConfig(FrontendProperties frontendProperties, HttpApiProperties httpApiProperties) {
+    private final FrontendProperties frontendProperties;
+    private final String writeToken;
+
+    public SecurityConfig(
+            FrontendProperties frontendProperties,
+            @Value("${app.http-api.write-token:}") String writeToken
+    ) {
         this.frontendProperties = frontendProperties;
-        this.httpApiProperties = httpApiProperties;
+        this.writeToken = writeToken;
     }
 
     @Bean
@@ -30,17 +46,48 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> {
                     auth.requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs", "/v3/api-docs/**").permitAll();
-                    if (httpApiProperties.isReadOnly()) {
-                        auth.requestMatchers(HttpMethod.GET, "/api/**").permitAll();
-                        auth.requestMatchers(HttpMethod.HEAD, "/api/**").permitAll();
-                        auth.requestMatchers(HttpMethod.OPTIONS, "/api/**").permitAll();
-                        auth.requestMatchers("/api/**").denyAll();
-                    } else {
-                        auth.requestMatchers("/api/**").permitAll();
-                    }
+                    auth.requestMatchers("/api/**").permitAll();
                     auth.anyRequest().permitAll();
                 })
+                .addFilterBefore(apiWriteTokenFilter(), AuthorizationFilter.class)
                 .build();
+    }
+
+    private OncePerRequestFilter apiWriteTokenFilter() {
+        return new OncePerRequestFilter() {
+            @Override
+            protected void doFilterInternal(
+                    HttpServletRequest request,
+                    HttpServletResponse response,
+                    FilterChain filterChain
+            ) throws ServletException, IOException {
+                if (SAFE_METHODS.contains(request.getMethod())
+                        || !isApiRequest(request)) {
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+
+                String actual = request.getHeader(API_KEY_HEADER);
+                if (writeToken == null || writeToken.isBlank() || !sameToken(writeToken, actual)) {
+                    response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+                    return;
+                }
+
+                filterChain.doFilter(request, response);
+            }
+        };
+    }
+
+    private static boolean sameToken(String expected, String actual) {
+        byte[] expectedBytes = expected.getBytes(StandardCharsets.UTF_8);
+        byte[] actualBytes = (actual == null ? "" : actual).getBytes(StandardCharsets.UTF_8);
+        return MessageDigest.isEqual(expectedBytes, actualBytes);
+    }
+
+    private static boolean isApiRequest(HttpServletRequest request) {
+        String contextPath = request.getContextPath();
+        String path = request.getRequestURI().substring(contextPath.length());
+        return path.startsWith("/api/");
     }
 
     @Bean
@@ -48,9 +95,7 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
 
         config.setAllowedOrigins(frontendProperties.getAllowedOrigins());
-        config.setAllowedMethods(httpApiProperties.isReadOnly()
-                ? List.of("GET", "HEAD", "OPTIONS")
-                : List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(false);
 

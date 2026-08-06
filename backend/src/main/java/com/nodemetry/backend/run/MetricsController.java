@@ -19,7 +19,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/metrics")
 @Tag(name = "Metrics", description = "Persisted ingestion metrics for physical-node runs.")
-@Tag(name = "Physical Node Runs", description = "Per-node run metrics for physical sensor nodes.")
 public class MetricsController {
 
     private final PhysicalNodeRunRepository repository;
@@ -30,7 +29,6 @@ public class MetricsController {
 
     @GetMapping("/ingestion")
     @Operation(
-            tags = {"Metrics", "Physical Node Runs"},
             summary = "Query physical-node ingestion metrics",
             description = "Returns persisted ingestion metrics. Filter by runId, nodeId, both, or neither. Expected: configured number of expected messages. Received: messages accepted by the backend. Duplicates: repeated messageId values rejected. Unique received: received - duplicates. Saved: unique messages persisted successfully. Delivery percentage: received / expected × 100. Persistence percentage: saved / unique received × 100."
     )

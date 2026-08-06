@@ -24,11 +24,11 @@ class VirtualNodeRunRepositoryTest {
     void updateCountersSetsAbsoluteValuesForRunningRun() {
         repository.saveAndFlush(run("run-001", null));
 
-        assertThat(repository.updateCounters("run-001", 5, 2)).isEqualTo(1);
+        assertThat(repository.updateCounters("run-001", 7, 5, 2)).isEqualTo(1);
         entityManager.clear();
 
         VirtualNodeRun updated = repository.findByRunId("run-001").orElseThrow();
-        assertThat(updated.getTotalReceived()).isZero();
+        assertThat(updated.getTotalReceived()).isEqualTo(7);
         assertThat(updated.getTotalSaved()).isEqualTo(5);
         assertThat(updated.getDuplicatesSkipped()).isEqualTo(2);
     }
@@ -43,10 +43,11 @@ class VirtualNodeRunRepositoryTest {
         run.setDuplicatesSkipped(1);
         repository.saveAndFlush(run);
 
-        assertThat(repository.updateCounters("run-001", 7, 3)).isEqualTo(1);
+        assertThat(repository.updateCounters("run-001", 10, 7, 3)).isEqualTo(1);
         entityManager.clear();
 
         VirtualNodeRun updated = repository.findByRunId("run-001").orElseThrow();
+        assertThat(updated.getTotalReceived()).isEqualTo(10);
         assertThat(updated.getTotalSaved()).isEqualTo(7);
         assertThat(updated.getDuplicatesSkipped()).isEqualTo(3);
     }
