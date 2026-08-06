@@ -20,8 +20,8 @@ IoT telemetry systems. In measured load tests it sustains 250 virtual nodes at
 
 ## Screenshots
 
-| View                         | Screenshot                                                       |
-| ---------------------------- | ---------------------------------------------------------------- |
+| View                         | Screenshot                                                        |
+| ---------------------------- | ----------------------------------------------------------------- |
 | Live physical-node dashboard | <img src="docs/screenshots/dashboard.png" width="100%" />         |
 | Ingestion metrics panel      | <img src="docs/screenshots/ingestion-metrics.png" width="100%" /> |
 | Load-test results            | <img src="docs/screenshots/load-test-results.png" width="100%" /> |
@@ -34,6 +34,8 @@ component READMEs:
 - [Backend README](backend/README.md)
 - [Frontend README](frontend/README.md)
 - [Simulator README](simulator/README.md)
+- [Hardware node001 README](hardware/esp32-node/nodemetry_node001/README.md)
+- Hardware node002 README (pending)
 
 Additional notes:
 
@@ -79,10 +81,10 @@ flowchart LR
 - PostgreSQL-backed node, reading, virtual-run, and physical-run state.
 - Per-node physical-run metrics and aggregate virtual load-test metrics.
 - STOMP over WebSocket for live readings, node status, and latest-node updates.
-- SvelteKit dashboard with physical-node charts and read-only production
+- SvelteKit dashboard with physical-node charts and production
   load-test views.
 - Python simulator for load testing and duplicate-delivery checks.
-- Production HTTP API read-only mode by default.
+- HTTP writes use a small shared-token gate; reads stay public.
 
 ## Load-Test Results
 
@@ -125,6 +127,7 @@ Key takeaways:
 nodemetry/
 ├── backend/       Spring Boot MQTT ingest, REST API, WebSocket, persistence
 ├── frontend/      SvelteKit dashboard and dev-only simulator control endpoint
+├── hardware/      ESP32 firmware, wiring, and physical-node test notes
 ├── simulator/     Python virtual MQTT node load generator
 ├── docs/          Supporting notes and screenshots
 └── README.md      Project overview
