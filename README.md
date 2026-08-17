@@ -35,7 +35,7 @@ component READMEs:
 - [Frontend README](frontend/README.md)
 - [Simulator README](simulator/README.md)
 - [Hardware node001 README](hardware/esp32-node/nodemetry_node001/README.md)
-- Hardware node002 README (pending)
+- [Hardware node002 README](hardware/esp32-node-002/README.md)
 
 Additional notes:
 
