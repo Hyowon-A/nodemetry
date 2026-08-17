@@ -8,14 +8,14 @@
 
 // Wifi details
 
-const char* ssid = "your-wifi-name";
-const char* wifi_password = "your-wifi-password";
+const char* ssid = "WIFI_NAME";
+const char* wifi_password = "WIFI_PASSWORD";
 
 // MQTT details
-const char* mqtt_server = "your-broker-host";
+const char* mqtt_server = "MQTT_HOST";
 const int mqtt_port = 8883;
-const char* mqtt_username = "your-MQTT-username";
-const char* mqtt_password = "your-MQTT-password";
+const char* mqtt_username = "MQTT_USERNAME";
+const char* mqtt_password = "MQTT_PASSWORD";
 
 // Node details
 String nodeId = "node-002";
@@ -24,7 +24,8 @@ String runId;
 unsigned long sequenceNumber = 0;
 
 const char* firmwareVersion = "firmware-1.0.0";
-const char* topic = "nodemetry/node-002/telemetry";
+const char* telemetryTopic = "nodemetry/node-002/telemetry";
+const char* statusTopic = "nodometry/node-002/status";
 
 // MQTT client
 WiFiClientSecure espClient;
@@ -128,11 +129,28 @@ void connectMQTT() {
     bool connected = client.connect(
       clientId.c_str(),
       mqtt_username,
-      mqtt_password
+      mqtt_password,
+      statusTopic,
+      1,
+      true,
+      "offline"
     );
 
     if (connected) {
       Serial.println("MQTT connected!");
+
+      bool statusPublished = client.publish(
+        statusTopic,
+        "online",
+        true
+      );
+
+      if (statusPublished) {
+        Serial.println("Online status published.");
+      } else {
+        Serial.println("Online status publish failed.");
+      }
+
     } else {
       Serial.print("MQTT failed, rc=");
       Serial.print(client.state());
@@ -180,7 +198,7 @@ void setupSensors() {
   Serial.println("Sensors ready.");
 }
 
-// Store the newest temperature and humidity readings
+// Store the new temperature and humidity readings
 void updateMovingAverage(
   float temperature,
   float humidity
@@ -408,7 +426,7 @@ void loop() {
   Serial.println(payload);
 
   bool publishSuccessful =
-    client.publish(topic, payload.c_str());
+    client.publish(telemetryTopic, payload.c_str());
 
   if (publishSuccessful) {
     Serial.println("MQTT publish successful.");
