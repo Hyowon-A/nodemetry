@@ -18,6 +18,12 @@ IoT telemetry systems. In measured load tests it sustains 250 virtual nodes at
 - [Live demo](https://nodemetry.vercel.app)
 - [Backend API docs](https://nodemetry.onrender.com/swagger-ui.html)
 
+## Contributors
+
+- [Hyowon Ahn](https://github.com/Hyowon-A) - backend, database, simulator, load testing, dashboard integration
+- [Jaehee Kim](https://github.com/jaeheewritescode) - ESP32 node 001, sensor integration and hardware experiments
+- [Sungmin Cho](https://github.com/sungmincho207) - ESP32 node 002, sensor integration and hardware experiments
+
 ## Screenshots
 
 | View                         | Screenshot                                                        |
@@ -34,8 +40,8 @@ component READMEs:
 - [Backend README](backend/README.md)
 - [Frontend README](frontend/README.md)
 - [Simulator README](simulator/README.md)
-- [Hardware node001 README](hardware/esp32-node/nodemetry_node001/README.md)
-- Hardware node002 README (pending)
+- [Physical node 001 README](hardware/esp32-node-001-jaehee/README.md)
+- [Physical node 002 README](hardware/esp32-node-002-sungmin/README.md)
 
 Additional notes:
 
